@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <script>window.SIMPLE_NETDISK_API_BASE="https://liangzai666.com/pan-api";</script>
@@ -374,51 +374,51 @@
       <h1>Simple Netdisk</h1>
       <a class="nav-link" href="#flomo">Flomo</a>
     </div>
-    <div id="status">正在加载</div>
+    <div id="status">姝ｅ湪鍔犺浇</div>
   </header>
   <main>
     <div class="workspace">
       <section class="file-column">
         <section class="toolbar">
       <input id="fileInput" type="file" multiple>
-      <input id="passwordInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="上传/删除/同步密码">
-      <button id="uploadBtn" class="primary">上传</button>
-      <button id="refreshBtn">刷新</button>
+      <input id="passwordInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="涓婁紶/鍒犻櫎/鍚屾瀵嗙爜">
+      <button id="uploadBtn" class="primary">涓婁紶</button>
+      <button id="refreshBtn">鍒锋柊</button>
         </section>
         <section class="card">
-      <table aria-label="文件列表">
+      <table aria-label="鏂囦欢鍒楄〃">
         <thead>
           <tr>
-            <th class="name-cell">文件名</th>
-            <th class="note-cell">备注</th>
-            <th class="size-cell">大小</th>
-            <th class="time-cell">上传时间</th>
-            <th class="action-cell">操作</th>
+            <th class="name-cell">鏂囦欢鍚?/th>
+            <th class="note-cell">澶囨敞</th>
+            <th class="size-cell">澶у皬</th>
+            <th class="time-cell">涓婁紶鏃堕棿</th>
+            <th class="action-cell">鎿嶄綔</th>
           </tr>
         </thead>
         <tbody id="fileList"></tbody>
       </table>
-      <div id="emptyState" class="empty" hidden>暂无文件</div>
+      <div id="emptyState" class="empty" hidden>鏆傛棤鏂囦欢</div>
         </section>
       </section>
 
       <aside id="flomo" class="flomo flomo-column">
       <div class="flomo-head">
         <div>
-          <h2>Flomo 同步区</h2>
-          <div class="hint">写文字、Ctrl+V 粘贴图片，点“同步”后会保存到服务器；长文字自动折叠。</div>
+          <h2>Flomo 鍚屾鍖?/h2>
+          <div class="hint">鍐欐枃瀛椼€丆trl+V 绮樿创鍥剧墖锛岀偣鈥滃悓姝モ€濆悗浼氫繚瀛樺埌鏈嶅姟鍣紱闀挎枃瀛楄嚜鍔ㄦ姌鍙犮€?/div>
         </div>
-        <input id="memoSearchInput" type="search" placeholder="搜索 flomo">
+        <input id="memoSearchInput" type="search" placeholder="鎼滅储 flomo">
       </div>
       <div class="composer">
-        <textarea id="memoInput" maxlength="5000" placeholder="记录文字；Ctrl+V 可以直接粘贴图片；Ctrl+Enter 同步"></textarea>
-        <div id="pasteZone" class="paste-zone" tabindex="0">点击这里或文本框后，Ctrl+V 粘贴图片</div>
+        <textarea id="memoInput" maxlength="5000" placeholder="璁板綍鏂囧瓧锛汣trl+V 鍙互鐩存帴绮樿创鍥剧墖锛汣trl+Enter 鍚屾"></textarea>
+        <div id="pasteZone" class="paste-zone" tabindex="0">鐐瑰嚮杩欓噷鎴栨枃鏈鍚庯紝Ctrl+V 绮樿创鍥剧墖</div>
         <div id="imagePreviewList" class="image-preview-list"></div>
         <div class="composer-actions">
-          <div class="hint">图片不会塞进文件列表，会作为 flomo 图片保存在服务器。</div>
+          <div class="hint">鍥剧墖涓嶄細濉炶繘鏂囦欢鍒楄〃锛屼細浣滀负 flomo 鍥剧墖淇濆瓨鍦ㄦ湇鍔″櫒銆?/div>
           <div class="actions">
-            <button id="clearMemoBtn">清空</button>
-            <button id="publishMemoBtn" class="primary">同步</button>
+            <button id="clearMemoBtn">娓呯┖</button>
+            <button id="publishMemoBtn" class="primary">鍚屾</button>
           </div>
         </div>
       </div>
@@ -435,7 +435,13 @@
     const emptyState = document.getElementById('emptyState');
     const statusEl = document.getElementById('status');
     const API_BASE = (window.SIMPLE_NETDISK_API_BASE || (location.pathname.startsWith('/pan') ? '/pan-api' : '')).replace(/\/$/, '');
-    function apiUrl(path) { return API_BASE ? API_BASE + path : path; }
+    function apiUrl(path) {
+      if (!API_BASE) return path;
+      if (API_BASE.endsWith('/pan-api') && path.startsWith('/api/')) {
+        return API_BASE + path.slice(4);
+      }
+      return API_BASE + path;
+    }
     function absoluteApiUrl(path) { return new URL(apiUrl(path), location.href).href; }
     const memoInput = document.getElementById('memoInput');
     const pasteZone = document.getElementById('pasteZone');
@@ -491,7 +497,7 @@
         container.appendChild(document.createTextNode(text.slice(last, match.index)));
         let label = match[0];
         let trailing = '';
-        while (/[),.，。！？!?]$/.test(label)) {
+        while (/[),.锛屻€傦紒锛??]$/.test(label)) {
           trailing = label.slice(-1) + trailing;
           label = label.slice(0, -1);
         }
@@ -514,21 +520,21 @@
 
     function sectionLabel(value) {
       const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return '更早';
+      if (Number.isNaN(date.getTime())) return '鏇存棭';
       const today = startOfDay(new Date());
       const day = startOfDay(date);
       const diff = Math.floor((today - day) / 86400000);
-      if (diff <= 0) return '今天';
-      if (diff === 1) return '昨天';
-      if (diff < 7) return '过去一周';
-      return '一周前';
+      if (diff <= 0) return '浠婂ぉ';
+      if (diff === 1) return '鏄ㄥぉ';
+      if (diff < 7) return '杩囧幓涓€鍛?;
+      return '涓€鍛ㄥ墠';
     }
 
     async function request(path, options) {
       const res = await fetch(apiUrl(path), options || {});
       if (!res.ok) {
-        if (res.status === 401 || res.status === 403) throw new Error('密码不正确');
-        throw new Error('请求失败：' + res.status);
+        if (res.status === 401 || res.status === 403) throw new Error('瀵嗙爜涓嶆纭?);
+        throw new Error('璇锋眰澶辫触锛? + res.status);
       }
       return res;
     }
@@ -570,7 +576,7 @@
         noteInput.className = 'note-input';
         noteInput.type = 'text';
         noteInput.maxLength = 5000;
-        noteInput.placeholder = '输入备注后回车';
+        noteInput.placeholder = '杈撳叆澶囨敞鍚庡洖杞?;
         noteInput.value = item.note || '';
         noteInput.dataset.savedValue = item.note || '';
         noteInput.addEventListener('input', function() {
@@ -602,14 +608,14 @@
           download.className = 'button-link';
           download.href = apiUrl('/api/raw' + encoded);
           download.download = item.name || '';
-          download.textContent = '下载';
+          download.textContent = '涓嬭浇';
           actions.appendChild(download);
         }
 
         const del = document.createElement('button');
         del.className = 'danger';
         del.type = 'button';
-        del.textContent = '删除';
+        del.textContent = '鍒犻櫎';
         del.addEventListener('click', function() { deleteItem(path, item.name || path); });
         actions.appendChild(del);
         actionCell.appendChild(actions);
@@ -627,11 +633,11 @@
       const files = Array.from(fileInput.files || []);
       const pass = passwordInput.value.trim();
       if (files.length === 0) {
-        setStatus('请选择文件', 'err');
+        setStatus('璇烽€夋嫨鏂囦欢', 'err');
         return;
       }
       if (!pass) {
-        setStatus('请输入密码', 'err');
+        setStatus('璇疯緭鍏ュ瘑鐮?, 'err');
         passwordInput.focus();
         return;
       }
@@ -640,7 +646,7 @@
         let done = 0;
         for (const file of files) {
           const target = '/api/resources/' + encodeURIComponent(cleanName(file.name)) + '?override=true';
-          setStatus('上传中 ' + (done + 1) + '/' + files.length);
+          setStatus('涓婁紶涓?' + (done + 1) + '/' + files.length);
           await request(target, {
             method: 'POST',
             headers: { 'X-Upload-Password': pass },
@@ -649,10 +655,10 @@
           done += 1;
         }
         fileInput.value = '';
-        setStatus('上传完成', 'ok');
+        setStatus('涓婁紶瀹屾垚', 'ok');
         await loadFiles();
       } catch (err) {
-        setStatus(err.message || '上传失败', 'err');
+        setStatus(err.message || '涓婁紶澶辫触', 'err');
       } finally {
         uploadBtn.disabled = false;
       }
@@ -661,7 +667,7 @@
     async function saveNote(path, input) {
       const pass = passwordInput.value.trim();
       if (!pass) {
-        setStatus('请输入密码', 'err');
+        setStatus('璇疯緭鍏ュ瘑鐮?, 'err');
         passwordInput.focus();
         return;
       }
@@ -679,9 +685,9 @@
         input.value = data.note || '';
         input.dataset.savedValue = input.value;
         input.classList.remove('dirty');
-        setStatus('备注已保存', 'ok');
+        setStatus('澶囨敞宸蹭繚瀛?, 'ok');
       } catch (err) {
-        setStatus(err.message || '备注保存失败', 'err');
+        setStatus(err.message || '澶囨敞淇濆瓨澶辫触', 'err');
       } finally {
         input.disabled = false;
         input.focus();
@@ -689,18 +695,18 @@
     }
 
     async function deleteItem(path, name) {
-      const pass = passwordInput.value.trim() || window.prompt('删除密码');
+      const pass = passwordInput.value.trim() || window.prompt('鍒犻櫎瀵嗙爜');
       if (!pass) return;
-      if (!window.confirm('删除 ' + name + '？')) return;
+      if (!window.confirm('鍒犻櫎 ' + name + '锛?)) return;
       try {
         await request('/api/resources' + encodePath(path), {
           method: 'DELETE',
           headers: { 'X-Upload-Password': pass }
         });
-        setStatus('已删除', 'ok');
+        setStatus('宸插垹闄?, 'ok');
         await loadFiles();
       } catch (err) {
-        setStatus(err.message || '删除失败', 'err');
+        setStatus(err.message || '鍒犻櫎澶辫触', 'err');
       }
     }
 
@@ -710,7 +716,7 @@
       const named = file.name ? file : new File([file], 'paste-' + Date.now() + '.' + ext, { type: file.type });
       pendingImages.push(named);
       renderPendingImages();
-      setStatus('已粘贴图片 ' + pendingImages.length + ' 张', 'ok');
+      setStatus('宸茬矘璐村浘鐗?' + pendingImages.length + ' 寮?, 'ok');
     }
 
     function renderPendingImages() {
@@ -723,8 +729,8 @@
         img.onload = function() { URL.revokeObjectURL(img.src); };
         const remove = document.createElement('button');
         remove.type = 'button';
-        remove.textContent = '×';
-        remove.title = '移除';
+        remove.textContent = '脳';
+        remove.title = '绉婚櫎';
         remove.addEventListener('click', function() {
           pendingImages.splice(index, 1);
           renderPendingImages();
@@ -758,12 +764,12 @@
       const pass = passwordInput.value.trim();
       const text = memoInput.value.trim();
       if (!pass) {
-        setStatus('请输入密码', 'err');
+        setStatus('璇疯緭鍏ュ瘑鐮?, 'err');
         passwordInput.focus();
         return;
       }
       if (!text && pendingImages.length === 0) {
-        setStatus('请输入文字或粘贴图片', 'err');
+        setStatus('璇疯緭鍏ユ枃瀛楁垨绮樿创鍥剧墖', 'err');
         memoInput.focus();
         return;
       }
@@ -782,10 +788,10 @@
         memoInput.value = '';
         pendingImages = [];
         renderPendingImages();
-        setStatus('已同步', 'ok');
+        setStatus('宸插悓姝?, 'ok');
         await loadMemos();
       } catch (err) {
-        setStatus(err.message || '同步失败', 'err');
+        setStatus(err.message || '鍚屾澶辫触', 'err');
       } finally {
         publishMemoBtn.disabled = false;
       }
@@ -807,7 +813,7 @@
       if (list.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty card';
-        empty.textContent = q ? '没有匹配的 flomo' : '暂无 flomo';
+        empty.textContent = q ? '娌℃湁鍖归厤鐨?flomo' : '鏆傛棤 flomo';
         memoFeed.appendChild(empty);
         return;
       }
@@ -822,13 +828,13 @@
         topActions.className = 'memo-top-actions';
         const copy = document.createElement('button');
         copy.type = 'button';
-        copy.textContent = '复制';
+        copy.textContent = '澶嶅埗';
         copy.addEventListener('click', function() { copyMemo(memo); });
         topActions.appendChild(copy);
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'danger';
-        del.textContent = '删除';
+        del.textContent = '鍒犻櫎';
         del.addEventListener('click', function() { deleteMemo(memo); });
         topActions.appendChild(del);
         meta.appendChild(time);
@@ -842,13 +848,13 @@
           const toggle = document.createElement('button');
           toggle.type = 'button';
           toggle.className = 'memo-toggle';
-          toggle.textContent = '展开';
+          toggle.textContent = '灞曞紑';
           toggle.hidden = true;
           let expanded = false;
           toggle.addEventListener('click', function() {
             expanded = !expanded;
             text.classList.toggle('collapsed', !expanded);
-            toggle.textContent = expanded ? '收起' : '展开';
+            toggle.textContent = expanded ? '鏀惰捣' : '灞曞紑';
           });
           card.appendChild(toggle);
           requestAnimationFrame(function() {
@@ -899,25 +905,25 @@
           document.execCommand('copy');
           area.remove();
         }
-        setStatus('已复制 flomo', 'ok');
+        setStatus('宸插鍒?flomo', 'ok');
       } catch (err) {
-        setStatus('复制失败', 'err');
+        setStatus('澶嶅埗澶辫触', 'err');
       }
     }
 
     async function deleteMemo(memo) {
-      const pass = passwordInput.value.trim() || window.prompt('删除密码');
+      const pass = passwordInput.value.trim() || window.prompt('鍒犻櫎瀵嗙爜');
       if (!pass) return;
-      if (!window.confirm('删除这条 flomo？')) return;
+      if (!window.confirm('鍒犻櫎杩欐潯 flomo锛?)) return;
       try {
         await request('/api/memos/' + encodeURIComponent(memo.id), {
           method: 'DELETE',
           headers: { 'X-Upload-Password': pass }
         });
-        setStatus('已删除 flomo', 'ok');
+        setStatus('宸插垹闄?flomo', 'ok');
         await loadMemos();
       } catch (err) {
-        setStatus(err.message || '删除失败', 'err');
+        setStatus(err.message || '鍒犻櫎澶辫触', 'err');
       }
     }
 
@@ -925,14 +931,14 @@
       memoInput.value = '';
       pendingImages = [];
       renderPendingImages();
-      setStatus('草稿已清空', 'ok');
+      setStatus('鑽夌宸叉竻绌?, 'ok');
     }
 
     uploadBtn.addEventListener('click', uploadFiles);
     refreshBtn.addEventListener('click', async function() {
-      setStatus('正在刷新');
+      setStatus('姝ｅ湪鍒锋柊');
       await Promise.all([loadFiles(), loadMemos()]);
-      setStatus('已更新', 'ok');
+      setStatus('宸叉洿鏂?, 'ok');
     });
     publishMemoBtn.addEventListener('click', publishMemo);
     clearMemoBtn.addEventListener('click', clearMemoDraft);
@@ -949,13 +955,14 @@
 
     (async function init() {
       try {
-        setStatus('正在加载');
+        setStatus('姝ｅ湪鍔犺浇');
         await Promise.all([loadFiles(), loadMemos()]);
-        setStatus('已更新', 'ok');
+        setStatus('宸叉洿鏂?, 'ok');
       } catch (err) {
-        setStatus(err.message || '加载失败', 'err');
+        setStatus(err.message || '鍔犺浇澶辫触', 'err');
       }
     })();
   </script>
 </body>
 </html>
+
