@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <script>window.SIMPLE_NETDISK_API_BASE="https://liangzai666.com/pan-api";</script>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Simple Netdisk</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --line: #d9dee7;
+      --text: #18202a;
+      --muted: #687586;
+      --accent: #1f6feb;
+      --danger: #c53030;
+      --ok: #087f5b;
+      --soft: #eef3f8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 15px;
+    }
+    header {
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    h1, h2 {
+      margin: 0;
+      letter-spacing: 0;
+    }
+    h1 { font-size: 20px; font-weight: 700; }
+    h2 { font-size: 18px; font-weight: 700; }
+    .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .nav-link {
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0 10px;
+      color: var(--text);
+      text-decoration: none;
+      background: #fff;
+      white-space: nowrap;
+    }
+    main {
+      width: min(1320px, calc(100vw - 32px));
+      margin: 24px auto 40px;
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .file-column, .flomo-column { min-width: 0; }
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 190px auto auto;
+      gap: 10px;
+      align-items: center;
+      padding: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    input[type="file"], input[type="password"], input[type="search"], .note-input, textarea {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 8px 10px;
+      font: inherit;
+    }
+    input[type="file"], input[type="password"], input[type="search"], .note-input {
+      height: 40px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 118px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+    textarea:focus, input:focus {
+      border-color: var(--accent);
+      outline: 2px solid rgba(31, 111, 235, .14);
+    }
+    .note-input { width: 100%; height: 36px; }
+    .note-input.dirty {
+      border-color: #d97706;
+      background: #fffaf0;
+    }
+    button, .button-link {
+      height: 40px;
+      min-width: 76px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 12px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+    button.danger { color: var(--danger); }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    #status {
+      min-width: 160px;
+      text-align: right;
+      color: var(--muted);
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #status.ok { color: var(--ok); }
+    #status.err { color: var(--danger); }
+    .card {
+      margin-top: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      height: 44px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 620;
+      background: #fbfcfe;
+    }
+    tr:last-child td { border-bottom: 0; }
+    .section-row td {
+      height: 38px;
+      padding: 10px 14px;
+      background: var(--soft);
+      color: #344054;
+      font-size: 13px;
+      font-weight: 700;
+      border-top: 1px solid var(--line);
+    }
+    .name-cell {
+      width: 30%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 560;
+    }
+    .note-cell { width: 28%; }
+    .size-cell { width: 10%; color: var(--muted); }
+    .time-cell { width: 18%; color: var(--muted); }
+    .action-cell { width: 14%; text-align: right; }
+    .actions {
+      display: inline-flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .empty {
+      padding: 36px 16px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .flomo {
+      margin-top: 0;
+      position: sticky;
+      top: 86px;
+      max-height: calc(100vh - 104px);
+      overflow: auto;
+      padding-right: 2px;
+    }
+    .flomo-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .composer {
+      padding: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .paste-zone {
+      margin-top: 10px;
+      border: 1px dashed #b8c2d0;
+      border-radius: 7px;
+      min-height: 52px;
+      padding: 12px;
+      color: var(--muted);
+      background: #fbfcfe;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .paste-zone.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #f0f6ff;
+    }
+    .image-preview-list, .memo-images {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .preview-thumb {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #f8fafc;
+      overflow: hidden;
+    }
+    .preview-thumb img {
+      display: block;
+      width: 100%;
+      height: 110px;
+      object-fit: contain;
+    }
+    .preview-thumb button {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      min-width: 28px;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      color: var(--danger);
+      background: rgba(255,255,255,.92);
+    }
+    .composer-actions {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .memo-feed {
+      margin-top: 14px;
+      display: grid;
+      gap: 12px;
+    }
+    .memo-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .memo-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .memo-text {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      line-height: 1.68;
+      position: relative;
+    }
+    .memo-text.collapsed {
+      max-height: 10.1em;
+      overflow: hidden;
+    }
+    .memo-text.collapsed::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 3.2em;
+      background: linear-gradient(to bottom, rgba(255,255,255,0), #fff);
+      pointer-events: none;
+    }
+    .memo-toggle {
+      margin-top: 8px;
+      height: 32px;
+      min-width: 58px;
+      color: var(--accent);
+      padding: 0 9px;
+    }
+    .memo-images img {
+      width: 100%;
+      max-height: 260px;
+      object-fit: contain;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #f8fafc;
+      cursor: zoom-in;
+    }
+    .memo-top-actions {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .memo-top-actions button {
+      height: 30px;
+      min-width: 54px;
+      padding: 0 8px;
+      font-size: 13px;
+    }
+    @media (max-width: 720px) {
+      header { padding: 12px 16px; flex-direction: column; align-items: stretch; }
+      .brand { justify-content: space-between; }
+      main { width: calc(100vw - 20px); margin-top: 10px; }
+      .workspace { grid-template-columns: 1fr; }
+      .flomo { position: static; max-height: none; overflow: visible; padding-right: 0; }
+      .toolbar { grid-template-columns: 1fr; }
+      #status { min-width: 0; max-width: none; text-align: left; }
+      th.size-cell, td.size-cell, th.time-cell, td.time-cell { display: none; }
+      .name-cell { width: 34%; }
+      .note-cell { width: 42%; }
+      .action-cell { width: 24%; }
+      th, td { padding: 10px 8px; }
+      .section-row td { padding: 10px 8px; }
+      .actions { gap: 6px; }
+      button, .button-link { min-width: 58px; padding: 0 8px; }
+      .flomo-head { align-items: flex-start; flex-direction: column; }
+      .image-preview-list, .memo-images { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+      .memo-images img { max-height: 190px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>Simple Netdisk</h1>
+      <a class="nav-link" href="#flomo">Flomo</a>
+    </div>
+    <div id="status">正在加载</div>
+  </header>
+  <main>
+    <div class="workspace">
+      <section class="file-column">
+        <section class="toolbar">
+      <input id="fileInput" type="file" multiple>
+      <input id="passwordInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="上传/删除/同步密码">
+      <button id="uploadBtn" class="primary">上传</button>
+      <button id="refreshBtn">刷新</button>
+        </section>
+        <section class="card">
+      <table aria-label="文件列表">
+        <thead>
+          <tr>
+            <th class="name-cell">文件名</th>
+            <th class="note-cell">备注</th>
+            <th class="size-cell">大小</th>
+            <th class="time-cell">上传时间</th>
+            <th class="action-cell">操作</th>
+          </tr>
+        </thead>
+        <tbody id="fileList"></tbody>
+      </table>
+      <div id="emptyState" class="empty" hidden>暂无文件</div>
+        </section>
+      </section>
+
+      <aside id="flomo" class="flomo flomo-column">
+      <div class="flomo-head">
+        <div>
+          <h2>Flomo 同步区</h2>
+          <div class="hint">写文字、Ctrl+V 粘贴图片，点“同步”后会保存到服务器；长文字自动折叠。</div>
+        </div>
+        <input id="memoSearchInput" type="search" placeholder="搜索 flomo">
+      </div>
+      <div class="composer">
+        <textarea id="memoInput" maxlength="5000" placeholder="记录文字；Ctrl+V 可以直接粘贴图片；Ctrl+Enter 同步"></textarea>
+        <div id="pasteZone" class="paste-zone" tabindex="0">点击这里或文本框后，Ctrl+V 粘贴图片</div>
+        <div id="imagePreviewList" class="image-preview-list"></div>
+        <div class="composer-actions">
+          <div class="hint">图片不会塞进文件列表，会作为 flomo 图片保存在服务器。</div>
+          <div class="actions">
+            <button id="clearMemoBtn">清空</button>
+            <button id="publishMemoBtn" class="primary">同步</button>
+          </div>
+        </div>
+      </div>
+      <div id="memoFeed" class="memo-feed"></div>
+      </aside>
+    </div>
+  </main>
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const passwordInput = document.getElementById('passwordInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const fileList = document.getElementById('fileList');
+    const emptyState = document.getElementById('emptyState');
+    const statusEl = document.getElementById('status');
+    const API_BASE = (window.SIMPLE_NETDISK_API_BASE || (location.pathname.startsWith('/pan') ? '/pan-api' : '')).replace(/\/$/, '');
+    function apiUrl(path) { return API_BASE ? API_BASE + path : path; }
+    function absoluteApiUrl(path) { return new URL(apiUrl(path), location.href).href; }
+    const memoInput = document.getElementById('memoInput');
+    const pasteZone = document.getElementById('pasteZone');
+    const imagePreviewList = document.getElementById('imagePreviewList');
+    const publishMemoBtn = document.getElementById('publishMemoBtn');
+    const clearMemoBtn = document.getElementById('clearMemoBtn');
+    const memoFeed = document.getElementById('memoFeed');
+    const memoSearchInput = document.getElementById('memoSearchInput');
+    let pendingImages = [];
+    let memos = [];
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = kind || '';
+    }
+
+    function cleanName(name) {
+      return name.replace(/[\\/]+/g, '_').trim() || 'untitled';
+    }
+
+    function encodePath(path) {
+      const value = path.charAt(0) === '/' ? path : '/' + path;
+      return value.split('/').map(function(part, index) {
+        return index === 0 ? '' : encodeURIComponent(part);
+      }).join('/');
+    }
+
+    function formatSize(bytes) {
+      if (!bytes) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let size = Number(bytes);
+      let index = 0;
+      while (size >= 1024 && index < units.length - 1) {
+        size = size / 1024;
+        index += 1;
+      }
+      return (index === 0 ? size.toFixed(0) : size.toFixed(1)) + ' ' + units[index];
+    }
+
+    function formatTime(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toLocaleString('zh-CN', { hour12: false });
+    }
+
+    function renderLinkedText(container, raw) {
+      container.textContent = '';
+      const text = raw || '';
+      const re = /(https?:\/\/[^\s<>'\"]+|www\.[^\s<>'\"]+)/gi;
+      let last = 0;
+      let match;
+      while ((match = re.exec(text)) !== null) {
+        container.appendChild(document.createTextNode(text.slice(last, match.index)));
+        let label = match[0];
+        let trailing = '';
+        while (/[),.，。！？!?]$/.test(label)) {
+          trailing = label.slice(-1) + trailing;
+          label = label.slice(0, -1);
+        }
+        const href = label.startsWith('www.') ? 'https://' + label : label;
+        const a = document.createElement('a');
+        a.href = href;
+        a.target = '_blank';
+        a.rel = 'noreferrer';
+        a.textContent = label;
+        container.appendChild(a);
+        if (trailing) container.appendChild(document.createTextNode(trailing));
+        last = match.index + match[0].length;
+      }
+      container.appendChild(document.createTextNode(text.slice(last)));
+    }
+
+    function startOfDay(date) {
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
+    function sectionLabel(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '更早';
+      const today = startOfDay(new Date());
+      const day = startOfDay(date);
+      const diff = Math.floor((today - day) / 86400000);
+      if (diff <= 0) return '今天';
+      if (diff === 1) return '昨天';
+      if (diff < 7) return '过去一周';
+      return '一周前';
+    }
+
+    async function request(path, options) {
+      const res = await fetch(apiUrl(path), options || {});
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) throw new Error('密码不正确');
+        throw new Error('请求失败：' + res.status);
+      }
+      return res;
+    }
+
+    async function loadFiles() {
+      const res = await request('/api/resources/');
+      const data = await res.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      items.sort(function(a, b) {
+        return new Date(b.modified || 0).getTime() - new Date(a.modified || 0).getTime();
+      });
+      fileList.innerHTML = '';
+      emptyState.hidden = items.length !== 0;
+      let currentSection = '';
+      for (const item of items) {
+        const section = sectionLabel(item.modified);
+        if (section !== currentSection) {
+          currentSection = section;
+          const sectionRow = document.createElement('tr');
+          sectionRow.className = 'section-row';
+          const sectionCell = document.createElement('td');
+          sectionCell.colSpan = 5;
+          sectionCell.textContent = section;
+          sectionRow.appendChild(sectionCell);
+          fileList.appendChild(sectionRow);
+        }
+
+        const row = document.createElement('tr');
+        const path = item.path || ('/' + item.name);
+        const encoded = encodePath(path);
+        const nameCell = document.createElement('td');
+        nameCell.className = 'name-cell';
+        nameCell.title = item.name || path;
+        nameCell.textContent = item.isDir ? (item.name + '/') : item.name;
+
+        const noteCell = document.createElement('td');
+        noteCell.className = 'note-cell';
+        const noteInput = document.createElement('input');
+        noteInput.className = 'note-input';
+        noteInput.type = 'text';
+        noteInput.maxLength = 5000;
+        noteInput.placeholder = '输入备注后回车';
+        noteInput.value = item.note || '';
+        noteInput.dataset.savedValue = item.note || '';
+        noteInput.addEventListener('input', function() {
+          noteInput.classList.toggle('dirty', noteInput.value !== noteInput.dataset.savedValue);
+        });
+        noteInput.addEventListener('keydown', function(event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            saveNote(path, noteInput);
+          }
+        });
+        noteCell.appendChild(noteInput);
+
+        const sizeCell = document.createElement('td');
+        sizeCell.className = 'size-cell';
+        sizeCell.textContent = item.isDir ? '-' : formatSize(item.size);
+
+        const timeCell = document.createElement('td');
+        timeCell.className = 'time-cell';
+        timeCell.textContent = formatTime(item.modified);
+
+        const actionCell = document.createElement('td');
+        actionCell.className = 'action-cell';
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        if (!item.isDir) {
+          const download = document.createElement('a');
+          download.className = 'button-link';
+          download.href = apiUrl('/api/raw' + encoded);
+          download.download = item.name || '';
+          download.textContent = '下载';
+          actions.appendChild(download);
+        }
+
+        const del = document.createElement('button');
+        del.className = 'danger';
+        del.type = 'button';
+        del.textContent = '删除';
+        del.addEventListener('click', function() { deleteItem(path, item.name || path); });
+        actions.appendChild(del);
+        actionCell.appendChild(actions);
+
+        row.appendChild(nameCell);
+        row.appendChild(noteCell);
+        row.appendChild(sizeCell);
+        row.appendChild(timeCell);
+        row.appendChild(actionCell);
+        fileList.appendChild(row);
+      }
+    }
+
+    async function uploadFiles() {
+      const files = Array.from(fileInput.files || []);
+      const pass = passwordInput.value.trim();
+      if (files.length === 0) {
+        setStatus('请选择文件', 'err');
+        return;
+      }
+      if (!pass) {
+        setStatus('请输入密码', 'err');
+        passwordInput.focus();
+        return;
+      }
+      uploadBtn.disabled = true;
+      try {
+        let done = 0;
+        for (const file of files) {
+          const target = '/api/resources/' + encodeURIComponent(cleanName(file.name)) + '?override=true';
+          setStatus('上传中 ' + (done + 1) + '/' + files.length);
+          await request(target, {
+            method: 'POST',
+            headers: { 'X-Upload-Password': pass },
+            body: file
+          });
+          done += 1;
+        }
+        fileInput.value = '';
+        setStatus('上传完成', 'ok');
+        await loadFiles();
+      } catch (err) {
+        setStatus(err.message || '上传失败', 'err');
+      } finally {
+        uploadBtn.disabled = false;
+      }
+    }
+
+    async function saveNote(path, input) {
+      const pass = passwordInput.value.trim();
+      if (!pass) {
+        setStatus('请输入密码', 'err');
+        passwordInput.focus();
+        return;
+      }
+      input.disabled = true;
+      try {
+        const res = await request('/api/notes' + encodePath(path), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Upload-Password': pass
+          },
+          body: JSON.stringify({ note: input.value })
+        });
+        const data = await res.json();
+        input.value = data.note || '';
+        input.dataset.savedValue = input.value;
+        input.classList.remove('dirty');
+        setStatus('备注已保存', 'ok');
+      } catch (err) {
+        setStatus(err.message || '备注保存失败', 'err');
+      } finally {
+        input.disabled = false;
+        input.focus();
+      }
+    }
+
+    async function deleteItem(path, name) {
+      const pass = passwordInput.value.trim() || window.prompt('删除密码');
+      if (!pass) return;
+      if (!window.confirm('删除 ' + name + '？')) return;
+      try {
+        await request('/api/resources' + encodePath(path), {
+          method: 'DELETE',
+          headers: { 'X-Upload-Password': pass }
+        });
+        setStatus('已删除', 'ok');
+        await loadFiles();
+      } catch (err) {
+        setStatus(err.message || '删除失败', 'err');
+      }
+    }
+
+    function addPendingImage(file) {
+      if (!file || !file.type || !file.type.startsWith('image/')) return;
+      const ext = file.type.split('/')[1] || 'png';
+      const named = file.name ? file : new File([file], 'paste-' + Date.now() + '.' + ext, { type: file.type });
+      pendingImages.push(named);
+      renderPendingImages();
+      setStatus('已粘贴图片 ' + pendingImages.length + ' 张', 'ok');
+    }
+
+    function renderPendingImages() {
+      imagePreviewList.innerHTML = '';
+      pendingImages.forEach(function(file, index) {
+        const wrap = document.createElement('div');
+        wrap.className = 'preview-thumb';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.onload = function() { URL.revokeObjectURL(img.src); };
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '×';
+        remove.title = '移除';
+        remove.addEventListener('click', function() {
+          pendingImages.splice(index, 1);
+          renderPendingImages();
+        });
+        wrap.appendChild(img);
+        wrap.appendChild(remove);
+        imagePreviewList.appendChild(wrap);
+      });
+    }
+
+    function handlePaste(event) {
+      const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
+      let added = 0;
+      for (const item of items) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            addPendingImage(file);
+            added += 1;
+          }
+        }
+      }
+      if (added) {
+        event.preventDefault();
+        pasteZone.classList.add('active');
+        setTimeout(function() { pasteZone.classList.remove('active'); }, 700);
+      }
+    }
+
+    async function publishMemo() {
+      const pass = passwordInput.value.trim();
+      const text = memoInput.value.trim();
+      if (!pass) {
+        setStatus('请输入密码', 'err');
+        passwordInput.focus();
+        return;
+      }
+      if (!text && pendingImages.length === 0) {
+        setStatus('请输入文字或粘贴图片', 'err');
+        memoInput.focus();
+        return;
+      }
+      publishMemoBtn.disabled = true;
+      try {
+        const form = new FormData();
+        form.append('text', memoInput.value);
+        pendingImages.forEach(function(file) {
+          form.append('images', file, file.name || ('paste-' + Date.now() + '.png'));
+        });
+        await request('/api/memos', {
+          method: 'POST',
+          headers: { 'X-Upload-Password': pass },
+          body: form
+        });
+        memoInput.value = '';
+        pendingImages = [];
+        renderPendingImages();
+        setStatus('已同步', 'ok');
+        await loadMemos();
+      } catch (err) {
+        setStatus(err.message || '同步失败', 'err');
+      } finally {
+        publishMemoBtn.disabled = false;
+      }
+    }
+
+    async function loadMemos() {
+      const res = await request('/api/memos');
+      const data = await res.json();
+      memos = Array.isArray(data.items) ? data.items : [];
+      renderMemos();
+    }
+
+    function renderMemos() {
+      const q = memoSearchInput.value.trim().toLowerCase();
+      const list = q ? memos.filter(function(memo) {
+        return (memo.text || '').toLowerCase().includes(q);
+      }) : memos;
+      memoFeed.innerHTML = '';
+      if (list.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty card';
+        empty.textContent = q ? '没有匹配的 flomo' : '暂无 flomo';
+        memoFeed.appendChild(empty);
+        return;
+      }
+      for (const memo of list) {
+        const card = document.createElement('article');
+        card.className = 'memo-card';
+        const meta = document.createElement('div');
+        meta.className = 'memo-meta';
+        const time = document.createElement('span');
+        time.textContent = formatTime(memo.created || memo.updated);
+        const topActions = document.createElement('div');
+        topActions.className = 'memo-top-actions';
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.textContent = '复制';
+        copy.addEventListener('click', function() { copyMemo(memo); });
+        topActions.appendChild(copy);
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'danger';
+        del.textContent = '删除';
+        del.addEventListener('click', function() { deleteMemo(memo); });
+        topActions.appendChild(del);
+        meta.appendChild(time);
+        meta.appendChild(topActions);
+        card.appendChild(meta);
+        if (memo.text) {
+          const text = document.createElement('div');
+          text.className = 'memo-text';
+          renderLinkedText(text, memo.text);
+          card.appendChild(text);
+          const toggle = document.createElement('button');
+          toggle.type = 'button';
+          toggle.className = 'memo-toggle';
+          toggle.textContent = '展开';
+          toggle.hidden = true;
+          let expanded = false;
+          toggle.addEventListener('click', function() {
+            expanded = !expanded;
+            text.classList.toggle('collapsed', !expanded);
+            toggle.textContent = expanded ? '收起' : '展开';
+          });
+          card.appendChild(toggle);
+          requestAnimationFrame(function() {
+            if ((memo.text || '').length > 220 || text.scrollHeight > text.clientHeight + 8) {
+              text.classList.add('collapsed');
+              toggle.hidden = false;
+            }
+          });
+        }
+        if (Array.isArray(memo.images) && memo.images.length) {
+          const images = document.createElement('div');
+          images.className = 'memo-images';
+          for (const image of memo.images) {
+            const link = document.createElement('a');
+            link.href = apiUrl(image.url);
+            link.target = '_blank';
+            link.rel = 'noreferrer';
+            const img = document.createElement('img');
+            img.src = apiUrl(image.url);
+            img.alt = image.name || '';
+            link.appendChild(img);
+            images.appendChild(link);
+          }
+          card.appendChild(images);
+        }
+        memoFeed.appendChild(card);
+      }
+    }
+
+    async function copyMemo(memo) {
+      const parts = [];
+      if (memo.text) parts.push(memo.text);
+      if (Array.isArray(memo.images) && memo.images.length) {
+        parts.push(memo.images.map(function(image) { return absoluteApiUrl(image.url); }).join('\n'));
+      }
+      const text = parts.join('\n\n');
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const area = document.createElement('textarea');
+          area.value = text;
+          area.style.position = 'fixed';
+          area.style.left = '-9999px';
+          document.body.appendChild(area);
+          area.focus();
+          area.select();
+          document.execCommand('copy');
+          area.remove();
+        }
+        setStatus('已复制 flomo', 'ok');
+      } catch (err) {
+        setStatus('复制失败', 'err');
+      }
+    }
+
+    async function deleteMemo(memo) {
+      const pass = passwordInput.value.trim() || window.prompt('删除密码');
+      if (!pass) return;
+      if (!window.confirm('删除这条 flomo？')) return;
+      try {
+        await request('/api/memos/' + encodeURIComponent(memo.id), {
+          method: 'DELETE',
+          headers: { 'X-Upload-Password': pass }
+        });
+        setStatus('已删除 flomo', 'ok');
+        await loadMemos();
+      } catch (err) {
+        setStatus(err.message || '删除失败', 'err');
+      }
+    }
+
+    function clearMemoDraft() {
+      memoInput.value = '';
+      pendingImages = [];
+      renderPendingImages();
+      setStatus('草稿已清空', 'ok');
+    }
+
+    uploadBtn.addEventListener('click', uploadFiles);
+    refreshBtn.addEventListener('click', async function() {
+      setStatus('正在刷新');
+      await Promise.all([loadFiles(), loadMemos()]);
+      setStatus('已更新', 'ok');
+    });
+    publishMemoBtn.addEventListener('click', publishMemo);
+    clearMemoBtn.addEventListener('click', clearMemoDraft);
+    memoSearchInput.addEventListener('input', renderMemos);
+    memoInput.addEventListener('paste', handlePaste);
+    pasteZone.addEventListener('paste', handlePaste);
+    pasteZone.addEventListener('click', function() { pasteZone.focus(); });
+    memoInput.addEventListener('keydown', function(event) {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        publishMemo();
+      }
+    });
+
+    (async function init() {
+      try {
+        setStatus('正在加载');
+        await Promise.all([loadFiles(), loadMemos()]);
+        setStatus('已更新', 'ok');
+      } catch (err) {
+        setStatus(err.message || '加载失败', 'err');
+      }
+    })();
+  </script>
+</body>
+</html>
