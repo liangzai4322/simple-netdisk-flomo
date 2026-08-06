@@ -374,6 +374,42 @@
       padding: 0 8px;
       font-size: 13px;
     }
+    .upload-progress {
+      display: none;
+      grid-column: 1 / -1;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+    }
+    .upload-progress.active { display: block; }
+    .upload-progress-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .upload-progress-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .upload-progress-track {
+      height: 9px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e8edf5;
+    }
+    .upload-progress-bar {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #1f6feb, #34d399);
+      transition: width .15s ease;
+    }
     @media (max-width: 720px) {
       header { padding: 12px 16px; flex-direction: column; align-items: stretch; }
       .brand { justify-content: space-between; }
@@ -439,6 +475,13 @@
       <button id="uploadBtn" class="primary">上传</button>
       <button id="refreshBtn">刷新</button>
         </section>
+        <section id="uploadProgress" class="upload-progress" aria-live="polite">
+          <div class="upload-progress-meta">
+            <span id="uploadProgressName" class="upload-progress-name">准备上传</span>
+            <strong id="uploadProgressText">0%</strong>
+          </div>
+          <div class="upload-progress-track"><div id="uploadProgressBar" class="upload-progress-bar"></div></div>
+        </section>
         <section class="card">
       <table aria-label="文件列表">
         <thead>
@@ -485,6 +528,10 @@
     const passwordInput = document.getElementById('passwordInput');
     const uploadBtn = document.getElementById('uploadBtn');
     const refreshBtn = document.getElementById('refreshBtn');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const uploadProgressName = document.getElementById('uploadProgressName');
+    const uploadProgressText = document.getElementById('uploadProgressText');
+    const uploadProgressBar = document.getElementById('uploadProgressBar');
     const fileList = document.getElementById('fileList');
     const emptyState = document.getElementById('emptyState');
     const statusEl = document.getElementById('status');
@@ -683,6 +730,40 @@
       }
     }
 
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+    }
+
+    function setUploadProgress(name, percent, loaded, total, index, count) {
+      uploadProgress.classList.add('active');
+      uploadProgressName.textContent = index + '/' + count + ' · ' + name + ' · ' + formatBytes(loaded) + ' / ' + formatBytes(total);
+      uploadProgressText.textContent = percent + '%';
+      uploadProgressBar.style.width = percent + '%';
+    }
+
+    function uploadOneFile(target, file, pass, onProgress) {
+      return new Promise(function(resolve, reject) {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', apiUrl(target), true);
+        xhr.setRequestHeader('X-Upload-Password', pass);
+        xhr.upload.addEventListener('progress', function(event) {
+          if (event.lengthComputable) onProgress(event.loaded, event.total);
+        });
+        xhr.addEventListener('load', function() {
+          if (xhr.status >= 200 && xhr.status < 300) return resolve();
+          if (xhr.status === 401 || xhr.status === 403) return reject(new Error('密码不正确'));
+          if (xhr.status === 413) return reject(new Error('服务器仍有限制：413'));
+          reject(new Error('上传失败：' + xhr.status));
+        });
+        xhr.addEventListener('error', function() { reject(new Error('网络连接中断')); });
+        xhr.addEventListener('abort', function() { reject(new Error('上传已取消')); });
+        xhr.send(file);
+      });
+    }
+
     async function uploadFiles() {
       const files = Array.from(fileInput.files || []);
       const pass = passwordInput.value.trim();
@@ -697,22 +778,29 @@
       }
       uploadBtn.disabled = true;
       try {
-        let done = 0;
-        for (const file of files) {
+        let completedBytes = 0;
+        const allBytes = files.reduce(function(sum, file) { return sum + file.size; }, 0);
+        for (let i = 0; i < files.length; i += 1) {
+          const file = files[i];
           const target = '/api/resources/' + encodeURIComponent(cleanName(file.name)) + '?override=true';
-          setStatus('上传中 ' + (done + 1) + '/' + files.length);
-          await request(target, {
-            method: 'POST',
-            headers: { 'X-Upload-Password': pass },
-            body: file
+          setStatus('上传中 ' + (i + 1) + '/' + files.length);
+          setUploadProgress(file.name, Math.round(completedBytes / Math.max(allBytes, 1) * 100), completedBytes, allBytes, i + 1, files.length);
+          await uploadOneFile(target, file, pass, function(fileLoaded) {
+            const loaded = completedBytes + fileLoaded;
+            const percent = Math.min(99, Math.round(loaded / Math.max(allBytes, 1) * 100));
+            setUploadProgress(file.name, percent, loaded, allBytes, i + 1, files.length);
           });
-          done += 1;
+          completedBytes += file.size;
         }
+        setUploadProgress('全部文件上传完成', 100, allBytes, allBytes, files.length, files.length);
         fileInput.value = '';
         setStatus('上传完成', 'ok');
         await loadFiles();
+        setTimeout(function() { uploadProgress.classList.remove('active'); }, 2500);
       } catch (err) {
         setStatus(err.message || '上传失败', 'err');
+        uploadProgressName.textContent = err.message || '上传失败';
+        uploadProgress.classList.add('active');
       } finally {
         uploadBtn.disabled = false;
       }
