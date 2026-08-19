@@ -471,7 +471,7 @@
       <section class="file-column">
         <section class="toolbar">
       <input id="fileInput" type="file" multiple>
-      <input id="passwordInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="上传/删除/同步密码">
+      <input id="passwordInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="首次输入密码，之后自动记住" title="密码仅保存在当前浏览器本地">
       <button id="uploadBtn" class="primary">上传</button>
       <button id="refreshBtn">刷新</button>
         </section>
@@ -532,6 +532,26 @@
     const uploadProgressName = document.getElementById('uploadProgressName');
     const uploadProgressText = document.getElementById('uploadProgressText');
     const uploadProgressBar = document.getElementById('uploadProgressBar');
+    const PASSWORD_STORAGE_KEY = 'wuhen-sync-upload-password-v1';
+
+    function restoreSavedPassword() {
+      try {
+        const savedPassword = localStorage.getItem(PASSWORD_STORAGE_KEY) || '';
+        if (savedPassword) passwordInput.value = savedPassword;
+      } catch (err) {}
+    }
+
+    function rememberPassword() {
+      const value = passwordInput.value.trim();
+      try {
+        if (value) localStorage.setItem(PASSWORD_STORAGE_KEY, value);
+        else localStorage.removeItem(PASSWORD_STORAGE_KEY);
+      } catch (err) {}
+    }
+
+    restoreSavedPassword();
+    passwordInput.addEventListener('change', rememberPassword);
+    passwordInput.addEventListener('blur', rememberPassword);
     const fileList = document.getElementById('fileList');
     const emptyState = document.getElementById('emptyState');
     const statusEl = document.getElementById('status');
@@ -776,6 +796,7 @@
         passwordInput.focus();
         return;
       }
+      rememberPassword();
       uploadBtn.disabled = true;
       try {
         let completedBytes = 0;
@@ -813,6 +834,7 @@
         passwordInput.focus();
         return;
       }
+      rememberPassword();
       input.disabled = true;
       try {
         const res = await request('/api/notes' + encodePath(path), {
@@ -839,6 +861,8 @@
     async function deleteItem(path, name) {
       const pass = passwordInput.value.trim() || window.prompt('删除密码');
       if (!pass) return;
+      passwordInput.value = pass;
+      rememberPassword();
       if (!window.confirm('删除 ' + name + '？')) return;
       try {
         await request('/api/resources' + encodePath(path), {
@@ -910,6 +934,7 @@
         passwordInput.focus();
         return;
       }
+      rememberPassword();
       if (!text && pendingImages.length === 0) {
         setStatus('请输入文字或粘贴图片', 'err');
         memoInput.focus();
@@ -1056,6 +1081,8 @@
     async function deleteMemo(memo) {
       const pass = passwordInput.value.trim() || window.prompt('删除密码');
       if (!pass) return;
+      passwordInput.value = pass;
+      rememberPassword();
       if (!window.confirm('删除这条 flomo？')) return;
       try {
         await request('/api/memos/' + encodeURIComponent(memo.id), {
