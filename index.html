@@ -363,6 +363,24 @@
       background: #f8fafc;
       cursor: zoom-in;
     }
+    .memo-edit-area {
+      width: 100%;
+      min-height: 112px;
+      resize: vertical;
+      line-height: 1.65;
+      font: inherit;
+      color: var(--text);
+      border: 1px solid #79a7f2;
+      border-radius: 9px;
+      padding: 10px 12px;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(31, 111, 235, .10);
+    }
+    .memo-edit-hint {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
     .memo-top-actions {
       display: inline-flex;
       gap: 8px;
@@ -998,6 +1016,11 @@
         copy.textContent = '复制';
         copy.addEventListener('click', function() { copyMemo(memo); });
         topActions.appendChild(copy);
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.textContent = '编辑';
+        edit.addEventListener('click', function() { beginEditMemo(memo, card); });
+        topActions.appendChild(edit);
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'danger';
@@ -1048,6 +1071,79 @@
           card.appendChild(images);
         }
         memoFeed.appendChild(card);
+      }
+    }
+
+    function insertTextAtCursor(input, value) {
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      input.setRangeText(value, start, end, 'end');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function beginEditMemo(memo, card) {
+      if (card.querySelector('.memo-edit-area')) return;
+      const textEl = card.querySelector('.memo-text');
+      const toggle = card.querySelector('.memo-toggle');
+      const editor = document.createElement('textarea');
+      editor.className = 'memo-edit-area';
+      editor.value = memo.text || '';
+      editor.maxLength = 5000;
+      editor.setAttribute('aria-label', '编辑 Flomo 内容');
+      const hint = document.createElement('div');
+      hint.className = 'memo-edit-hint';
+      hint.textContent = '回车保存 · Ctrl+回车换行 · Esc取消';
+      if (textEl) textEl.replaceWith(editor);
+      else card.querySelector('.memo-meta').insertAdjacentElement('afterend', editor);
+      if (toggle) toggle.hidden = true;
+      editor.insertAdjacentElement('afterend', hint);
+      editor.focus();
+      editor.setSelectionRange(editor.value.length, editor.value.length);
+      editor.addEventListener('keydown', async function(event) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          renderMemos();
+          return;
+        }
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        if (event.ctrlKey || event.metaKey) {
+          insertTextAtCursor(editor, '\n');
+          return;
+        }
+        await saveMemoEdit(memo, editor);
+      });
+    }
+
+    async function saveMemoEdit(memo, editor) {
+      const pass = passwordInput.value.trim();
+      if (!pass) {
+        setStatus('请输入密码', 'err');
+        passwordInput.focus();
+        return;
+      }
+      rememberPassword();
+      editor.disabled = true;
+      setStatus('正在保存');
+      try {
+        const res = await request('/api/memos/' + encodeURIComponent(memo.id), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Upload-Password': pass
+          },
+          body: JSON.stringify({ text: editor.value })
+        });
+        const data = await res.json();
+        const updated = data.memo || {};
+        memo.text = updated.text == null ? editor.value : updated.text;
+        memo.updated = updated.updated || new Date().toISOString();
+        setStatus('已保存', 'ok');
+        renderMemos();
+      } catch (err) {
+        editor.disabled = false;
+        editor.focus();
+        setStatus(err.message || '保存失败', 'err');
       }
     }
 
