@@ -1074,13 +1074,6 @@
       }
     }
 
-    function insertTextAtCursor(input, value) {
-      const start = input.selectionStart;
-      const end = input.selectionEnd;
-      input.setRangeText(value, start, end, 'end');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-
     function beginEditMemo(memo, card) {
       if (card.querySelector('.memo-edit-area')) return;
       const textEl = card.querySelector('.memo-text');
@@ -1092,7 +1085,7 @@
       editor.setAttribute('aria-label', '编辑 Flomo 内容');
       const hint = document.createElement('div');
       hint.className = 'memo-edit-hint';
-      hint.textContent = '回车保存 · Ctrl+回车换行 · Esc取消';
+      hint.textContent = '回车换行 · Ctrl+回车保存 · Esc取消';
       if (textEl) textEl.replaceWith(editor);
       else card.querySelector('.memo-meta').insertAdjacentElement('afterend', editor);
       if (toggle) toggle.hidden = true;
@@ -1106,11 +1099,8 @@
           return;
         }
         if (event.key !== 'Enter') return;
+        if (!(event.ctrlKey || event.metaKey)) return;
         event.preventDefault();
-        if (event.ctrlKey || event.metaKey) {
-          insertTextAtCursor(editor, '\n');
-          return;
-        }
         await saveMemoEdit(memo, editor);
       });
     }
