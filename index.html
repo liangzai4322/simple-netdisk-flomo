@@ -376,6 +376,7 @@
       background: #fff;
       box-shadow: 0 0 0 3px rgba(31, 111, 235, .10);
     }
+    .memo-text { cursor: text; }
     .memo-edit-hint {
       margin-top: 6px;
       color: var(--muted);
@@ -1033,7 +1034,12 @@
         if (memo.text) {
           const text = document.createElement('div');
           text.className = 'memo-text';
+          text.title = '双击编辑';
           renderLinkedText(text, memo.text);
+          text.addEventListener('dblclick', function(event) {
+            if (event.target.closest('a')) return;
+            beginEditMemo(memo, card);
+          });
           card.appendChild(text);
           const toggle = document.createElement('button');
           toggle.type = 'button';
