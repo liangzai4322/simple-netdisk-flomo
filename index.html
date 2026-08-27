@@ -1173,14 +1173,13 @@
         parts.push(memo.images.map(function(image) { return absoluteApiUrl(image.url); }).join('\n'));
       }
       const text = parts.join('\n\n');
-      let copied = false;
-      if (navigator.clipboard && window.isSecureContext) {
+      let copied = legacyCopyText(text);
+      if (!copied && navigator.clipboard && window.isSecureContext) {
         try {
           await navigator.clipboard.writeText(text);
           copied = true;
         } catch (err) {}
       }
-      if (!copied) copied = legacyCopyText(text);
       if (copied) {
         setStatus('已复制 flomo', 'ok');
       } else {
