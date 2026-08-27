@@ -1055,13 +1055,14 @@
             toggle.textContent = expanded ? '收起' : '展开';
           });
           card.appendChild(toggle);
+          text.classList.add('collapsed');
           requestAnimationFrame(function() {
-            const styles = window.getComputedStyle(text);
-            const lineHeight = parseFloat(styles.lineHeight) || 24;
-            const collapseHeight = lineHeight * 6;
-            if (text.scrollHeight > collapseHeight + 2) {
-              text.classList.add('collapsed');
+            const isActuallyOverflowing = text.scrollHeight > text.clientHeight + 2;
+            if (isActuallyOverflowing) {
               toggle.hidden = false;
+            } else {
+              text.classList.remove('collapsed');
+              toggle.remove();
             }
           });
         }
