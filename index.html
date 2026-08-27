@@ -436,6 +436,8 @@
       .brand-title span { display: none; }
       main { width: calc(100vw - 20px); margin-top: 10px; }
       .workspace { grid-template-columns: 1fr; }
+      .workspace[data-mobile-view="files"] .flomo-column { display: none; }
+      .workspace[data-mobile-view="flomo"] .file-column { display: none; }
       .flomo { position: static; max-height: none; overflow: visible; padding-right: 0; }
       .toolbar { grid-template-columns: 1fr; }
       #status { min-width: 0; max-width: none; text-align: left; }
@@ -481,13 +483,13 @@
           <span>Netdisk · Flomo</span>
         </div>
       </div>
-      <a class="nav-link" href="#flomo">Flomo</a>
+      <a id="mobileViewToggle" class="nav-link" href="#flomo">Flomo</a>
     </div>
     <div id="status">正在加载</div>
   </header>
   <main>
-    <div class="workspace">
-      <section class="file-column">
+    <div id="workspace" class="workspace" data-mobile-view="files">
+      <section id="files" class="file-column">
         <section class="toolbar">
       <input id="fileInput" type="file" multiple>
       <input id="passwordInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="首次输入密码，之后自动记住" title="密码仅保存在当前浏览器本地">
@@ -1054,7 +1056,10 @@
           });
           card.appendChild(toggle);
           requestAnimationFrame(function() {
-            if ((memo.text || '').length > 220 || text.scrollHeight > text.clientHeight + 8) {
+            const styles = window.getComputedStyle(text);
+            const lineHeight = parseFloat(styles.lineHeight) || 24;
+            const collapseHeight = lineHeight * 6;
+            if (text.scrollHeight > collapseHeight + 2) {
               text.classList.add('collapsed');
               toggle.hidden = false;
             }
@@ -1143,6 +1148,24 @@
       }
     }
 
+    function legacyCopyText(text) {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.top = '0';
+      area.style.left = '-9999px';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.focus();
+      area.select();
+      area.setSelectionRange(0, area.value.length);
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch (err) {}
+      area.remove();
+      return copied;
+    }
+
     async function copyMemo(memo) {
       const parts = [];
       if (memo.text) parts.push(memo.text);
@@ -1150,22 +1173,17 @@
         parts.push(memo.images.map(function(image) { return absoluteApiUrl(image.url); }).join('\n'));
       }
       const text = parts.join('\n\n');
-      try {
-        if (navigator.clipboard && window.isSecureContext) {
+      let copied = false;
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
           await navigator.clipboard.writeText(text);
-        } else {
-          const area = document.createElement('textarea');
-          area.value = text;
-          area.style.position = 'fixed';
-          area.style.left = '-9999px';
-          document.body.appendChild(area);
-          area.focus();
-          area.select();
-          document.execCommand('copy');
-          area.remove();
-        }
+          copied = true;
+        } catch (err) {}
+      }
+      if (!copied) copied = legacyCopyText(text);
+      if (copied) {
         setStatus('已复制 flomo', 'ok');
-      } catch (err) {
+      } else {
         setStatus('复制失败', 'err');
       }
     }
@@ -1207,6 +1225,32 @@
     memoInput.addEventListener('paste', handlePaste);
     pasteZone.addEventListener('paste', handlePaste);
     pasteZone.addEventListener('click', function() { pasteZone.focus(); });
+    const workspace = document.getElementById('workspace');
+    const mobileViewToggle = document.getElementById('mobileViewToggle');
+    const mobileMedia = window.matchMedia('(max-width: 720px)');
+
+    function setMobileView(view, scrollToTop) {
+      const next = view === 'flomo' ? 'flomo' : 'files';
+      workspace.dataset.mobileView = next;
+      mobileViewToggle.textContent = next === 'flomo' ? '文件' : 'Flomo';
+      mobileViewToggle.href = next === 'flomo' ? '#files' : '#flomo';
+      if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    mobileViewToggle.addEventListener('click', function(event) {
+      if (!mobileMedia.matches) return;
+      event.preventDefault();
+      setMobileView(workspace.dataset.mobileView === 'flomo' ? 'files' : 'flomo', true);
+    });
+
+    if (mobileMedia.matches && location.hash === '#flomo') setMobileView('flomo', false);
+    mobileMedia.addEventListener('change', function(event) {
+      if (!event.matches) {
+        workspace.dataset.mobileView = 'files';
+        mobileViewToggle.textContent = 'Flomo';
+        mobileViewToggle.href = '#flomo';
+      }
+    });
     memoInput.addEventListener('keydown', function(event) {
       if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
         event.preventDefault();
