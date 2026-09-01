@@ -377,6 +377,21 @@
       box-shadow: 0 0 0 3px rgba(31, 111, 235, .10);
     }
     .memo-text { cursor: text; }
+    .memo-card.pinned {
+      border-color: #f4c95d;
+      box-shadow: 0 0 0 2px rgba(244, 201, 93, .16);
+    }
+    .pin-mark {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 8px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      color: #8a5a00;
+      background: #fff4c2;
+      font-size: 12px;
+      font-weight: 600;
+    }
     .memo-edit-hint {
       margin-top: 6px;
       color: var(--muted);
@@ -676,7 +691,13 @@
       const res = await fetch(apiUrl(path), options || {});
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) throw new Error('密码不正确');
-        throw new Error('请求失败：' + res.status);
+        let message = '';
+        try {
+          const data = await res.clone().json();
+          message = data && data.message ? String(data.message) : '';
+        } catch (err) {}
+        if (message === 'pin limit reached') message = '最多只能置顶2条 Flomo';
+        throw new Error(message || ('请求失败：' + res.status));
       }
       return res;
     }
@@ -994,9 +1015,16 @@
 
     function renderMemos() {
       const q = memoSearchInput.value.trim().toLowerCase();
-      const list = q ? memos.filter(function(memo) {
+      const filtered = q ? memos.filter(function(memo) {
         return (memo.text || '').toLowerCase().includes(q);
       }) : memos;
+      const list = filtered.slice().sort(function(a, b) {
+        if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+        if (a.pinned && b.pinned) {
+          return new Date(b.pinned_at || b.updated || 0).getTime() - new Date(a.pinned_at || a.updated || 0).getTime();
+        }
+        return new Date(b.created || b.updated || 0).getTime() - new Date(a.created || a.updated || 0).getTime();
+      });
       memoFeed.innerHTML = '';
       if (list.length === 0) {
         const empty = document.createElement('div');
@@ -1008,10 +1036,17 @@
       for (const memo of list) {
         const card = document.createElement('article');
         card.className = 'memo-card';
+        if (memo.pinned) card.classList.add('pinned');
         const meta = document.createElement('div');
         meta.className = 'memo-meta';
         const time = document.createElement('span');
         time.textContent = formatTime(memo.created || memo.updated);
+        if (memo.pinned) {
+          const pinMark = document.createElement('span');
+          pinMark.className = 'pin-mark';
+          pinMark.textContent = '已置顶';
+          time.appendChild(pinMark);
+        }
         const topActions = document.createElement('div');
         topActions.className = 'memo-top-actions';
         const copy = document.createElement('button');
@@ -1024,6 +1059,11 @@
         edit.textContent = '编辑';
         edit.addEventListener('click', function() { beginEditMemo(memo, card); });
         topActions.appendChild(edit);
+        const pin = document.createElement('button');
+        pin.type = 'button';
+        pin.textContent = memo.pinned ? '取消置顶' : '置顶';
+        pin.addEventListener('click', function() { toggleMemoPin(memo, pin); });
+        topActions.appendChild(pin);
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'danger';
@@ -1185,6 +1225,37 @@
         setStatus('已复制 flomo', 'ok');
       } else {
         setStatus('复制失败', 'err');
+      }
+    }
+
+    async function toggleMemoPin(memo, button) {
+      const pass = passwordInput.value.trim();
+      if (!pass) {
+        setStatus('请输入密码', 'err');
+        passwordInput.focus();
+        return;
+      }
+      rememberPassword();
+      button.disabled = true;
+      try {
+        const res = await request('/api/memos/' + encodeURIComponent(memo.id), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Upload-Password': pass
+          },
+          body: JSON.stringify({ pinned: !Boolean(memo.pinned) })
+        });
+        const data = await res.json();
+        const updated = data.memo || {};
+        memo.pinned = Boolean(updated.pinned);
+        memo.pinned_at = updated.pinned_at || null;
+        memo.updated = updated.updated || memo.updated;
+        setStatus(memo.pinned ? '已置顶' : '已取消置顶', 'ok');
+        renderMemos();
+      } catch (err) {
+        button.disabled = false;
+        setStatus(err.message || '置顶失败', 'err');
       }
     }
 
