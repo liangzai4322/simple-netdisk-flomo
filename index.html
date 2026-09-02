@@ -95,21 +95,16 @@
       gap: 8px;
     }
     main {
-      width: min(1720px, calc(100vw - 28px));
+      width: min(1320px, calc(100vw - 32px));
       margin: 24px auto 40px;
     }
     .workspace {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
+      grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+      gap: 18px;
       align-items: start;
     }
-    .file-column, .flomo-column, .schedule-column { min-width: 0; }
-    .workspace.three-panel .toolbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-    .workspace.three-panel th.size-cell,
-    .workspace.three-panel td.size-cell,
-    .workspace.three-panel th.time-cell,
-    .workspace.three-panel td.time-cell { display: none; }
+    .file-column, .flomo-column { min-width: 0; }
     .toolbar {
       display: grid;
       grid-template-columns: minmax(220px, 1fr) 190px auto auto;
@@ -473,8 +468,8 @@
     #scheduleDate { height: 40px; min-width: 0; flex: 1 1 140px; border: 1px solid var(--line); border-radius: 6px; padding: 0 8px; font: inherit; }
     .schedule-layout {
       display: grid;
-      grid-template-columns: minmax(138px, .42fr) minmax(0, .58fr);
-      gap: 10px;
+      grid-template-columns: minmax(0, 1.05fr) minmax(380px, .95fr);
+      gap: 18px;
       align-items: start;
     }
     .timeline-panel, .schedule-editor-card {
@@ -489,10 +484,10 @@
       height: auto;
       min-height: 62px;
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: 112px minmax(0, 1fr);
       align-items: center;
-      gap: 3px;
-      padding: 9px 10px;
+      gap: 12px;
+      padding: 10px 12px;
       text-align: left;
       border-color: transparent;
       background: #f8fafc;
@@ -507,6 +502,8 @@
     .schedule-editor-card h3 { margin: 0 0 6px; font-size: 20px; }
     .schedule-editor-card .hint { margin-bottom: 12px; }
     #scheduleEditor { min-height: 300px; }
+    .schedule-readonly { min-height: 300px; padding: 14px; border: 1px solid var(--line); border-radius: 7px; background: #f8fafc; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; }
+    .schedule-readonly-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
     .schedule-editor-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
     .schedule-slot-nav { display: flex; gap: 6px; }
     .schedule-save-state { color: var(--muted); font-size: 13px; }
@@ -517,12 +514,8 @@
       .brand-title span { display: none; }
       main { width: calc(100vw - 20px); margin-top: 10px; }
       .workspace { grid-template-columns: 1fr; }
-      .workspace[data-mobile-view="files"] .flomo-column,
-      .workspace[data-mobile-view="files"] .schedule-column { display: none; }
-      .workspace[data-mobile-view="flomo"] .file-column,
-      .workspace[data-mobile-view="flomo"] .schedule-column { display: none; }
-      .workspace[data-mobile-view="schedule"] .file-column,
-      .workspace[data-mobile-view="schedule"] .flomo-column { display: none; }
+      .workspace[data-mobile-view="files"] .flomo-column { display: none; }
+      .workspace[data-mobile-view="flomo"] .file-column { display: none; }
       .flomo { position: static; max-height: none; overflow: visible; padding-right: 0; }
       .toolbar { grid-template-columns: 1fr; }
       #status { min-width: 0; max-width: none; text-align: left; }
@@ -585,7 +578,7 @@
     <div id="status">正在加载</div>
   </header>
   <main>
-    <div id="workspace" class="workspace three-panel" data-mobile-view="files">
+    <div id="workspace" class="workspace" data-mobile-view="files">
       <section id="files" class="file-column">
         <section class="toolbar">
       <input id="fileInput" type="file" multiple>
@@ -639,7 +632,8 @@
       </div>
       <div id="memoFeed" class="memo-feed"></div>
       </aside>
-    <section id="schedule" class="schedule-view schedule-column">
+    </div>
+    <section id="schedule" class="schedule-view" hidden>
       <div class="schedule-head">
         <div class="schedule-title">
           <h2>日程消耗</h2>
@@ -658,7 +652,9 @@
         </section>
         <aside class="schedule-editor-card">
           <h3 id="scheduleSlotTitle">09:00–10:00</h3>
-          <div class="hint">填写这个小时实际做了什么；支持多行。Ctrl+回车保存。</div>
+          <div id="scheduleReadOnlyHead" class="schedule-readonly-head" hidden><span class="hint">该时段已记录</span><button id="scheduleEdit" type="button">编辑</button></div>
+          <div id="scheduleReadOnly" class="schedule-readonly" hidden></div>
+          <div id="scheduleEditHint" class="hint">填写这个小时实际做了什么；支持多行。Ctrl+回车保存。</div>
           <textarea id="scheduleEditor" maxlength="5000" placeholder="例如：起床，骑自行车赶路；路上听了《王川宝典》。"></textarea>
           <div class="schedule-editor-actions">
             <div class="schedule-slot-nav">
@@ -673,7 +669,6 @@
         </aside>
       </div>
     </section>
-    </div>
   </main>
   <script>
     const fileInput = document.getElementById('fileInput');
@@ -730,6 +725,10 @@
     const scheduleEditor = document.getElementById('scheduleEditor');
     const scheduleSlotTitle = document.getElementById('scheduleSlotTitle');
     const scheduleSave = document.getElementById('scheduleSave');
+    const scheduleEdit = document.getElementById('scheduleEdit');
+    const scheduleReadOnly = document.getElementById('scheduleReadOnly');
+    const scheduleReadOnlyHead = document.getElementById('scheduleReadOnlyHead');
+    const scheduleEditHint = document.getElementById('scheduleEditHint');
     const scheduleSaveState = document.getElementById('scheduleSaveState');
     const schedulePrevDay = document.getElementById('schedulePrevDay');
     const scheduleNextDay = document.getElementById('scheduleNextDay');
@@ -739,13 +738,19 @@
     let pendingImages = [];
     let memos = [];
     let scheduleSlots = {};
-    const SCHEDULE_VISIBLE_HOURS = [0].concat(Array.from({ length: 15 }, function(_, index) { return index + 9; }));
+    const SCHEDULE_VISIBLE_HOURS = Array.from({ length: 16 }, function(_, index) { return index + 9; });
     function normalizeScheduleHour(hour) {
+      if (hour === 0) return 24;
       return SCHEDULE_VISIBLE_HOURS.includes(hour) ? hour : 9;
     }
     let selectedScheduleHour = normalizeScheduleHour(new Date().getHours());
     let scheduleDirty = false;
+    let scheduleEditing = false;
     let loadedScheduleDate = '';
+    const pendingScheduleWrites = new Map();
+    const scheduleWriteChains = new Map();
+    let scheduleLoadVersion = 0;
+    let appView = 'sync';
 
     function setStatus(text, kind) {
       statusEl.textContent = text;
@@ -1428,11 +1433,22 @@
       return year + '-' + month + '-' + day;
     }
 
+    function addDaysToDateKey(dateKey, days) {
+      const parts = dateKey.split('-').map(Number);
+      const date = new Date(parts[0], parts[1] - 1, parts[2]);
+      date.setDate(date.getDate() + days);
+      return localDateKey(date);
+    }
+
     function scheduleHourLabel(hour) {
-      const start = String(hour).padStart(2, '0') + ':00';
-      const endHour = hour === 23 ? 24 : hour + 1;
-      const end = String(endHour).padStart(2, '0') + ':00';
-      return start + '–' + end;
+      if (hour === 24) return '00:00–01:00（次日）';
+      return String(hour).padStart(2, '0') + ':00?' + String(hour + 1).padStart(2, '0') + ':00';
+    }
+
+    function scheduleStorageTarget(workDate, displayHour) {
+      return displayHour === 24
+        ? { date: addDaysToDateKey(workDate, 1), hour: 0 }
+        : { date: workDate, hour: displayHour };
     }
 
     function renderScheduleTimeline() {
@@ -1453,9 +1469,7 @@
         preview.textContent = text.trim() ? text.trim().replace(/\s*\n\s*/g, ' · ') : '未记录';
         row.appendChild(time);
         row.appendChild(preview);
-        row.addEventListener('click', async function() {
-          await selectScheduleHour(hour);
-        });
+        row.addEventListener('click', function() { selectScheduleHour(hour); });
         scheduleTimeline.appendChild(row);
       }
     }
@@ -1468,38 +1482,26 @@
       panel.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
     }
 
-    function fillScheduleEditor() {
+    function fillScheduleEditor(forceEdit) {
+      const text = scheduleSlots[String(selectedScheduleHour)] || '';
       scheduleSlotTitle.textContent = scheduleHourLabel(selectedScheduleHour);
-      scheduleEditor.value = scheduleSlots[String(selectedScheduleHour)] || '';
+      scheduleEditor.value = text;
       scheduleDirty = false;
-      scheduleSaveState.textContent = scheduleEditor.value.trim() ? '已保存' : '尚未记录';
+      scheduleEditing = !!forceEdit || !text.trim();
+      scheduleEditor.hidden = !scheduleEditing;
+      scheduleEditHint.hidden = !scheduleEditing;
+      scheduleSave.hidden = !scheduleEditing;
+      scheduleReadOnly.hidden = scheduleEditing;
+      scheduleReadOnlyHead.hidden = scheduleEditing;
+      scheduleReadOnly.textContent = text;
+      scheduleSaveState.textContent = text.trim() ? '已保存' : '尚未记录';
     }
 
-    async function selectScheduleHour(hour) {
-      if (!SCHEDULE_VISIBLE_HOURS.includes(hour) || hour === selectedScheduleHour) return true;
-      if (scheduleDirty && !(await saveScheduleSlot())) return false;
-      selectedScheduleHour = hour;
-      renderScheduleTimeline();
-      fillScheduleEditor();
-      requestAnimationFrame(scrollSelectedScheduleIntoView);
-      return true;
+    function scheduleWriteKey(dateKey, hour) {
+      return dateKey + '/' + hour;
     }
 
-    async function loadScheduleDay() {
-      const dateKey = scheduleDate.value;
-      if (!dateKey) return;
-      setStatus('正在加载日程');
-      const res = await request('/api/schedule?date=' + encodeURIComponent(dateKey));
-      const data = await res.json();
-      scheduleSlots = data && data.slots && typeof data.slots === 'object' ? data.slots : {};
-      loadedScheduleDate = dateKey;
-      renderScheduleTimeline();
-      fillScheduleEditor();
-      requestAnimationFrame(scrollSelectedScheduleIntoView);
-      setStatus('日程已更新', 'ok');
-    }
-
-    async function saveScheduleSlot() {
+    function queueScheduleWrite(workDate, displayHour, text) {
       const pass = passwordInput.value.trim();
       if (!pass) {
         setStatus('请输入密码', 'err');
@@ -1507,48 +1509,131 @@
         return false;
       }
       rememberPassword();
-      scheduleSave.disabled = true;
-      scheduleSaveState.textContent = '保存中…';
-      try {
-        const text = scheduleEditor.value;
-        const dateKey = loadedScheduleDate || scheduleDate.value;
-        await request('/api/schedule/' + encodeURIComponent(dateKey) + '/' + selectedScheduleHour, {
+      const target = scheduleStorageTarget(workDate, displayHour);
+      const key = scheduleWriteKey(target.date, target.hour);
+      const token = Symbol(key);
+      pendingScheduleWrites.set(key, { token: token, text: text });
+      scheduleSaveState.textContent = '后台保存中…';
+      const previous = scheduleWriteChains.get(key) || Promise.resolve();
+      const write = previous.catch(function() {}).then(function() {
+        return request('/api/schedule/' + encodeURIComponent(target.date) + '/' + target.hour, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Upload-Password': pass
-          },
+          headers: { 'Content-Type': 'application/json', 'X-Upload-Password': pass },
           body: JSON.stringify({ text: text })
         });
-        if (text.trim()) scheduleSlots[String(selectedScheduleHour)] = text;
-        else delete scheduleSlots[String(selectedScheduleHour)];
-        scheduleDirty = false;
+      });
+      scheduleWriteChains.set(key, write);
+      write.then(function() {
+        const pending = pendingScheduleWrites.get(key);
+        if (pending && pending.token === token) pendingScheduleWrites.delete(key);
+        if (scheduleWriteChains.get(key) === write) scheduleWriteChains.delete(key);
         scheduleSaveState.textContent = '已保存';
-        setStatus('日程已保存', 'ok');
-        renderScheduleTimeline();
-        return true;
-      } catch (err) {
-        scheduleSaveState.textContent = '保存失败';
+      }).catch(function(err) {
+        const pending = pendingScheduleWrites.get(key);
+        if (pending && pending.token === token) pendingScheduleWrites.delete(key);
+        if (scheduleWriteChains.get(key) === write) scheduleWriteChains.delete(key);
+        scheduleSaveState.textContent = '保存失败，内容仍保留在页面';
         setStatus(err.message || '日程保存失败', 'err');
-        return false;
-      } finally {
-        scheduleSave.disabled = false;
-      }
+      });
+      return true;
     }
 
-    async function changeScheduleDate(days) {
-      if (scheduleDirty && !(await saveScheduleSlot())) return;
-      const parts = scheduleDate.value.split('-').map(Number);
-      const date = new Date(parts[0], parts[1] - 1, parts[2]);
-      date.setDate(date.getDate() + days);
-      scheduleDate.value = localDateKey(date);
-      await loadScheduleDay();
+    function commitCurrentScheduleDraft() {
+      if (!scheduleDirty) return true;
+      const text = scheduleEditor.value;
+      if (!queueScheduleWrite(loadedScheduleDate || scheduleDate.value, selectedScheduleHour, text)) return false;
+      if (text.trim()) scheduleSlots[String(selectedScheduleHour)] = text;
+      else delete scheduleSlots[String(selectedScheduleHour)];
+      scheduleDirty = false;
+      renderScheduleTimeline();
+      return true;
+    }
+
+    function selectScheduleHour(hour) {
+      if (!SCHEDULE_VISIBLE_HOURS.includes(hour) || hour === selectedScheduleHour) return true;
+      if (!commitCurrentScheduleDraft()) return false;
+      selectedScheduleHour = hour;
+      renderScheduleTimeline();
+      fillScheduleEditor(false);
+      requestAnimationFrame(scrollSelectedScheduleIntoView);
+      return true;
+    }
+
+    async function loadScheduleDay() {
+      const dateKey = scheduleDate.value;
+      if (!dateKey) return;
+      commitCurrentScheduleDraft();
+      loadedScheduleDate = dateKey;
+      const loadVersion = ++scheduleLoadVersion;
+      const nextDate = addDaysToDateKey(dateKey, 1);
+      setStatus('正在加载日程');
+      const responses = await Promise.all([
+        request('/api/schedule?date=' + encodeURIComponent(dateKey)),
+        request('/api/schedule?date=' + encodeURIComponent(nextDate))
+      ]);
+      const values = await Promise.all(responses.map(function(res) { return res.json(); }));
+      if (loadVersion !== scheduleLoadVersion || dateKey !== scheduleDate.value) return;
+      const daySlots = values[0] && values[0].slots && typeof values[0].slots === 'object' ? values[0].slots : {};
+      const nextSlots = values[1] && values[1].slots && typeof values[1].slots === 'object' ? values[1].slots : {};
+      const merged = {};
+      for (let hour = 9; hour <= 23; hour += 1) if (daySlots[String(hour)]) merged[String(hour)] = daySlots[String(hour)];
+      if (nextSlots['0']) merged['24'] = nextSlots['0'];
+      for (const [key, pending] of pendingScheduleWrites.entries()) {
+        const dayPrefix = dateKey + '/';
+        const nextZero = nextDate + '/0';
+        if (key.startsWith(dayPrefix)) {
+          const hour = key.slice(dayPrefix.length);
+          if (Number(hour) >= 9) {
+            if (pending.text.trim()) merged[hour] = pending.text;
+            else delete merged[hour];
+          }
+        } else if (key === nextZero) {
+          if (pending.text.trim()) merged['24'] = pending.text;
+          else delete merged['24'];
+        }
+      }
+      scheduleSlots = merged;
+      renderScheduleTimeline();
+      fillScheduleEditor(false);
+      requestAnimationFrame(scrollSelectedScheduleIntoView);
+      setStatus('日程已更新', 'ok');
+    }
+
+    function saveScheduleSlot() {
+      if (!scheduleDirty) return true;
+      const saved = commitCurrentScheduleDraft();
+      if (saved) fillScheduleEditor(false);
+      return saved;
+    }
+
+    function changeScheduleDate(days) {
+      if (!commitCurrentScheduleDraft()) return;
+      scheduleDate.value = addDaysToDateKey(scheduleDate.value, days);
+      loadScheduleDay();
     }
 
     function moveScheduleSlot(delta) {
       const currentIndex = SCHEDULE_VISIBLE_HOURS.indexOf(selectedScheduleHour);
       const nextIndex = Math.max(0, Math.min(SCHEDULE_VISIBLE_HOURS.length - 1, currentIndex + delta));
       selectScheduleHour(SCHEDULE_VISIBLE_HOURS[nextIndex]);
+    }
+
+    function setAppView(view) {
+      appView = view === 'schedule' ? 'schedule' : 'sync';
+      const showingSchedule = appView === 'schedule';
+      workspace.hidden = showingSchedule;
+      scheduleView.hidden = !showingSchedule;
+      mobileViewToggle.hidden = showingSchedule;
+      scheduleToggle.textContent = showingSchedule ? '返回同步' : '日程消耗';
+      scheduleToggle.href = showingSchedule ? '#sync' : '#schedule';
+      if (showingSchedule) requestAnimationFrame(scrollSelectedScheduleIntoView);
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+
+    function currentWorkDateKey() {
+      const now = new Date();
+      if (now.getHours() === 0) now.setDate(now.getDate() - 1);
+      return localDateKey(now);
     }
 
     uploadBtn.addEventListener('click', uploadFiles);
@@ -1568,12 +1653,10 @@
     const mobileMedia = window.matchMedia('(max-width: 720px)');
 
     function setMobileView(view, scrollToTop) {
-      const next = ['files', 'flomo', 'schedule'].includes(view) ? view : 'files';
+      const next = view === 'flomo' ? 'flomo' : 'files';
       workspace.dataset.mobileView = next;
-      mobileViewToggle.textContent = next === 'files' ? 'Flomo' : '文件';
-      mobileViewToggle.href = next === 'files' ? '#flomo' : '#files';
-      scheduleToggle.textContent = next === 'schedule' ? 'Flomo' : '日程消耗';
-      scheduleToggle.href = next === 'schedule' ? '#flomo' : '#schedule';
+      mobileViewToggle.textContent = next === 'flomo' ? '文件' : 'Flomo';
+      mobileViewToggle.href = next === 'flomo' ? '#files' : '#flomo';
       if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -1583,13 +1666,17 @@
       setMobileView(workspace.dataset.mobileView === 'files' ? 'flomo' : 'files', true);
     });
 
-    scheduleToggle.addEventListener('click', async function(event) {
-      if (!mobileMedia.matches) return;
+    scheduleToggle.addEventListener('click', function(event) {
       event.preventDefault();
-      if (workspace.dataset.mobileView === 'schedule' && scheduleDirty && !(await saveScheduleSlot())) return;
-      setMobileView(workspace.dataset.mobileView === 'schedule' ? 'flomo' : 'schedule', true);
+      if (appView === 'schedule' && !commitCurrentScheduleDraft()) return;
+      setAppView(appView === 'schedule' ? 'sync' : 'schedule');
     });
     scheduleSave.addEventListener('click', saveScheduleSlot);
+    scheduleEdit.addEventListener('click', function() {
+      fillScheduleEditor(true);
+      scheduleEditor.focus();
+      scheduleEditor.setSelectionRange(scheduleEditor.value.length, scheduleEditor.value.length);
+    });
     scheduleEditor.addEventListener('input', function() {
       scheduleDirty = true;
       scheduleSaveState.textContent = '待保存';
@@ -1602,32 +1689,24 @@
     });
     schedulePrevDay.addEventListener('click', function() { changeScheduleDate(-1); });
     scheduleNextDay.addEventListener('click', function() { changeScheduleDate(1); });
-    scheduleToday.addEventListener('click', async function() {
-      if (scheduleDirty && !(await saveScheduleSlot())) return;
-      scheduleDate.value = localDateKey(new Date());
-      await loadScheduleDay();
+    scheduleToday.addEventListener('click', function() {
+      if (!commitCurrentScheduleDraft()) return;
+      scheduleDate.value = currentWorkDateKey();
+      loadScheduleDay();
     });
-    scheduleDate.addEventListener('change', async function() {
-      const nextDate = scheduleDate.value;
-      if (scheduleDirty) {
-        scheduleDate.value = loadedScheduleDate;
-        if (!(await saveScheduleSlot())) return;
-        scheduleDate.value = nextDate;
-      }
-      await loadScheduleDay();
+    scheduleDate.addEventListener('change', function() {
+      if (!commitCurrentScheduleDraft()) return;
+      loadScheduleDay();
     });
     schedulePrevSlot.addEventListener('click', function() { moveScheduleSlot(-1); });
     scheduleNextSlot.addEventListener('click', function() { moveScheduleSlot(1); });
 
     if (mobileMedia.matches && location.hash === '#flomo') setMobileView('flomo', false);
-    if (mobileMedia.matches && location.hash === '#schedule') setMobileView('schedule', false);
     mobileMedia.addEventListener('change', function(event) {
       if (!event.matches) {
         workspace.dataset.mobileView = 'files';
         mobileViewToggle.textContent = 'Flomo';
         mobileViewToggle.href = '#flomo';
-        scheduleToggle.textContent = '日程消耗';
-        scheduleToggle.href = '#schedule';
       }
     });
     memoInput.addEventListener('keydown', function(event) {
@@ -1640,8 +1719,9 @@
     (async function init() {
       try {
         setStatus('正在加载');
-        scheduleDate.value = localDateKey(new Date());
+        scheduleDate.value = currentWorkDateKey();
         await Promise.all([loadFiles(), loadMemos(), loadScheduleDay()]);
+        if (location.hash === '#schedule') setAppView('schedule');
         setStatus('已更新', 'ok');
       } catch (err) {
         setStatus(err.message || '加载失败', 'err');
