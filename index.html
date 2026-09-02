@@ -1620,6 +1620,7 @@
         setStatus('正在加载');
         scheduleDate.value = localDateKey(new Date());
         await Promise.all([loadFiles(), loadMemos()]);
+        if (location.hash === '#schedule') await setAppView('schedule');
         setStatus('已更新', 'ok');
       } catch (err) {
         setStatus(err.message || '加载失败', 'err');
