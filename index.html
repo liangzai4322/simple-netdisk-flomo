@@ -1462,7 +1462,10 @@
 
     function scrollSelectedScheduleIntoView() {
       const selected = scheduleTimeline.querySelector('.timeline-row.selected');
-      if (selected) selected.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const panel = scheduleTimeline.closest('.timeline-panel');
+      if (!selected || !panel) return;
+      const targetTop = selected.offsetTop - (panel.clientHeight / 2) + (selected.offsetHeight / 2);
+      panel.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
     }
 
     function fillScheduleEditor() {
