@@ -472,6 +472,8 @@
       gap: 18px;
       align-items: start;
     }
+    .schedule-layout.editor-collapsed { grid-template-columns: minmax(0, 1fr); }
+    .schedule-layout.editor-collapsed .schedule-editor-card { display: none; }
     .timeline-panel, .schedule-editor-card {
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -646,7 +648,7 @@
           <button id="scheduleNextDay" type="button">后一天</button>
         </div>
       </div>
-      <div class="schedule-layout">
+      <div id="scheduleLayout" class="schedule-layout editor-collapsed">
         <section class="timeline-panel" aria-label="24小时时间线">
           <div id="scheduleTimeline" class="timeline-list"></div>
         </section>
@@ -719,6 +721,7 @@
     const memoFeed = document.getElementById('memoFeed');
     const memoSearchInput = document.getElementById('memoSearchInput');
     const scheduleView = document.getElementById('schedule');
+    const scheduleLayout = document.getElementById('scheduleLayout');
     const scheduleToggle = document.getElementById('scheduleToggle');
     const scheduleDate = document.getElementById('scheduleDate');
     const scheduleTimeline = document.getElementById('scheduleTimeline');
@@ -746,6 +749,7 @@
     let selectedScheduleHour = normalizeScheduleHour(new Date().getHours());
     let scheduleDirty = false;
     let scheduleEditing = false;
+    let schedulePanelOpen = false;
     let loadedScheduleDate = '';
     const pendingScheduleWrites = new Map();
     const scheduleWriteChains = new Map();
@@ -1469,7 +1473,7 @@
         preview.textContent = text.trim() ? text.trim().replace(/\s*\n\s*/g, ' · ') : '未记录';
         row.appendChild(time);
         row.appendChild(preview);
-        row.addEventListener('click', function() { selectScheduleHour(hour); });
+        row.addEventListener('click', function() { selectScheduleHour(hour, true); });
         scheduleTimeline.appendChild(row);
       }
     }
@@ -1549,12 +1553,24 @@
       return true;
     }
 
-    function selectScheduleHour(hour) {
-      if (!SCHEDULE_VISIBLE_HOURS.includes(hour) || hour === selectedScheduleHour) return true;
+    function selectScheduleHour(hour, openPanel) {
+      if (!SCHEDULE_VISIBLE_HOURS.includes(hour)) return true;
+      if (hour === selectedScheduleHour) {
+        if (openPanel) {
+          schedulePanelOpen = true;
+          scheduleLayout.classList.remove('editor-collapsed');
+          fillScheduleEditor(false);
+        }
+        return true;
+      }
       if (!commitCurrentScheduleDraft()) return false;
       selectedScheduleHour = hour;
+      if (openPanel) {
+        schedulePanelOpen = true;
+        scheduleLayout.classList.remove('editor-collapsed');
+      }
       renderScheduleTimeline();
-      fillScheduleEditor(false);
+      if (schedulePanelOpen) fillScheduleEditor(false);
       requestAnimationFrame(scrollSelectedScheduleIntoView);
       return true;
     }
@@ -1594,7 +1610,7 @@
       }
       scheduleSlots = merged;
       renderScheduleTimeline();
-      fillScheduleEditor(false);
+      if (schedulePanelOpen) fillScheduleEditor(false);
       requestAnimationFrame(scrollSelectedScheduleIntoView);
       setStatus('日程已更新', 'ok');
     }
@@ -1615,7 +1631,7 @@
     function moveScheduleSlot(delta) {
       const currentIndex = SCHEDULE_VISIBLE_HOURS.indexOf(selectedScheduleHour);
       const nextIndex = Math.max(0, Math.min(SCHEDULE_VISIBLE_HOURS.length - 1, currentIndex + delta));
-      selectScheduleHour(SCHEDULE_VISIBLE_HOURS[nextIndex]);
+      selectScheduleHour(SCHEDULE_VISIBLE_HOURS[nextIndex], true);
     }
 
     function setAppView(view) {
@@ -1626,7 +1642,11 @@
       mobileViewToggle.hidden = showingSchedule;
       scheduleToggle.textContent = showingSchedule ? '返回同步' : '日程消耗';
       scheduleToggle.href = showingSchedule ? '#sync' : '#schedule';
-      if (showingSchedule) requestAnimationFrame(scrollSelectedScheduleIntoView);
+      if (showingSchedule) {
+        schedulePanelOpen = false;
+        scheduleLayout.classList.add('editor-collapsed');
+        requestAnimationFrame(scrollSelectedScheduleIntoView);
+      }
       window.scrollTo({ top: 0, behavior: 'auto' });
     }
 
