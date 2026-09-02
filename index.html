@@ -477,14 +477,14 @@
       border-radius: 10px;
       background: var(--panel);
     }
-    .timeline-panel { padding: 10px; }
+    .timeline-panel { max-height: calc(100vh - 190px); overflow-y: auto; padding: 10px; }
     .timeline-list { display: grid; gap: 6px; }
     .timeline-row {
       width: 100%;
       height: auto;
       min-height: 62px;
       display: grid;
-      grid-template-columns: 76px minmax(0, 1fr);
+      grid-template-columns: 112px minmax(0, 1fr);
       align-items: center;
       gap: 12px;
       padding: 10px 12px;
@@ -535,7 +535,8 @@
       .schedule-layout { grid-template-columns: 1fr; }
       .schedule-editor-card { position: static; }
       #scheduleEditor { min-height: 240px; }
-      .timeline-row { grid-template-columns: 68px minmax(0, 1fr); }
+      .timeline-panel { max-height: 58vh; }
+      .timeline-row { grid-template-columns: 104px minmax(0, 1fr); }
     }
   </style>
 </head>
@@ -1429,6 +1430,7 @@
         const row = document.createElement('button');
         row.type = 'button';
         row.className = 'timeline-row';
+        row.dataset.hour = String(hour);
         if (text.trim()) row.classList.add('filled');
         if (hour === selectedScheduleHour) row.classList.add('selected');
         const time = document.createElement('span');
@@ -1446,6 +1448,11 @@
       }
     }
 
+    function scrollSelectedScheduleIntoView() {
+      const selected = scheduleTimeline.querySelector('.timeline-row.selected');
+      if (selected) selected.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+
     function fillScheduleEditor() {
       scheduleSlotTitle.textContent = scheduleHourLabel(selectedScheduleHour);
       scheduleEditor.value = scheduleSlots[String(selectedScheduleHour)] || '';
@@ -1459,6 +1466,7 @@
       selectedScheduleHour = hour;
       renderScheduleTimeline();
       fillScheduleEditor();
+      requestAnimationFrame(scrollSelectedScheduleIntoView);
       return true;
     }
 
@@ -1472,6 +1480,7 @@
       loadedScheduleDate = dateKey;
       renderScheduleTimeline();
       fillScheduleEditor();
+      requestAnimationFrame(scrollSelectedScheduleIntoView);
       setStatus('日程已更新', 'ok');
     }
 
