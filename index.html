@@ -1441,8 +1441,8 @@
     }
 
     function scheduleHourLabel(hour) {
-      if (hour === 24) return '00:00–01:00（次日）';
-      return String(hour).padStart(2, '0') + ':00?' + String(hour + 1).padStart(2, '0') + ':00';
+      if (hour === 24) return '00:00 - 01:00（次日）';
+      return String(hour).padStart(2, '0') + ':00 - ' + String(hour + 1).padStart(2, '0') + ':00';
     }
 
     function scheduleStorageTarget(workDate, displayHour) {
