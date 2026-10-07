@@ -318,6 +318,7 @@
       display: grid;
       gap: 12px;
     }
+    .memo-pagination { display: flex; justify-content: center; padding: 16px 0; }
     .memo-card {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -634,6 +635,7 @@
         </div>
       </div>
       <div id="memoFeed" class="memo-feed"></div>
+      <div class="memo-pagination"><button id="memoLoadMore" type="button" hidden>加载更多</button></div>
       </aside>
     </div>
     <section id="schedule" class="schedule-view" hidden>
@@ -720,6 +722,7 @@
     const publishMemoBtn = document.getElementById('publishMemoBtn');
     const clearMemoBtn = document.getElementById('clearMemoBtn');
     const memoFeed = document.getElementById('memoFeed');
+    const memoLoadMore = document.getElementById('memoLoadMore');
     const memoSearchInput = document.getElementById('memoSearchInput');
     const scheduleView = document.getElementById('schedule');
     const scheduleLayout = document.getElementById('scheduleLayout');
@@ -741,6 +744,12 @@
     const scheduleNextSlot = document.getElementById('scheduleNextSlot');
     let pendingImages = [];
     let memos = [];
+    let memoNextCursor = null;
+    let memoHasMore = false;
+    let memoLoading = false;
+    let memoLoadVersion = 0;
+    let memoRetryAppend = null;
+    let memoSearchTimer = null;
     let scheduleSlots = {};
     const SCHEDULE_VISIBLE_HOURS = Array.from({ length: 16 }, function(_, index) { return index + 9; });
     function normalizeScheduleHour(hour) {
@@ -1153,30 +1162,49 @@
       }
     }
 
-    async function loadMemos() {
-      const res = await request('/api/memos');
-      const data = await res.json();
-      memos = Array.isArray(data.items) ? data.items : [];
-      renderMemos();
+    async function loadMemos(append) {
+      append = append === true;
+      if (append && (memoLoading || !memoHasMore)) return;
+      const version = ++memoLoadVersion;
+      const params = new URLSearchParams({ limit: '20', q: memoSearchInput.value.trim() });
+      if (append && memoNextCursor) params.set('cursor', memoNextCursor);
+      memoLoading = true;
+      memoLoadMore.hidden = false;
+      memoLoadMore.disabled = true;
+      memoLoadMore.textContent = '加载中…';
+      try {
+        const res = await request('/api/memos?' + params.toString());
+        const data = await res.json();
+        if (version !== memoLoadVersion) return;
+        const page = Array.isArray(data.items) ? data.items.slice(0, 20) : [];
+        const knownIds = new Set(append ? memos.map(function(memo) { return memo.id; }) : []);
+        const newItems = page.filter(function(memo) { return !knownIds.has(memo.id); });
+        memos = append ? memos.concat(newItems) : newItems;
+        memoNextCursor = data.next_cursor || null;
+        memoHasMore = Boolean(data.has_more && memoNextCursor);
+        memoRetryAppend = null;
+        renderMemos(append ? newItems : null);
+      } catch (err) {
+        if (version !== memoLoadVersion) return;
+        memoRetryAppend = append;
+        throw err;
+      } finally {
+        if (version === memoLoadVersion) {
+          memoLoading = false;
+          memoLoadMore.disabled = false;
+          memoLoadMore.hidden = !memoHasMore && memoRetryAppend === null;
+          memoLoadMore.textContent = memoRetryAppend === null ? '加载更多' : '重试';
+        }
+      }
     }
 
-    function renderMemos() {
-      const q = memoSearchInput.value.trim().toLowerCase();
-      const filtered = q ? memos.filter(function(memo) {
-        return (memo.text || '').toLowerCase().includes(q);
-      }) : memos;
-      const list = filtered.slice().sort(function(a, b) {
-        if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
-        if (a.pinned && b.pinned) {
-          return new Date(b.pinned_at || b.updated || 0).getTime() - new Date(a.pinned_at || a.updated || 0).getTime();
-        }
-        return new Date(b.created || b.updated || 0).getTime() - new Date(a.created || a.updated || 0).getTime();
-      });
-      memoFeed.innerHTML = '';
-      if (list.length === 0) {
+    function renderMemos(appendItems) {
+      const list = appendItems || memos;
+      if (!appendItems) memoFeed.innerHTML = '';
+      if (memos.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty card';
-        empty.textContent = q ? '没有匹配的 flomo' : '暂无 flomo';
+        empty.textContent = memoSearchInput.value.trim() ? '没有匹配的 flomo' : '暂无 flomo';
         memoFeed.appendChild(empty);
         return;
       }
@@ -1262,6 +1290,8 @@
             link.target = '_blank';
             link.rel = 'noreferrer';
             const img = document.createElement('img');
+            img.loading = 'lazy';
+            img.decoding = 'async';
             img.src = apiUrl(image.url);
             img.alt = image.name || '';
             link.appendChild(img);
@@ -1399,7 +1429,7 @@
         memo.pinned_at = updated.pinned_at || null;
         memo.updated = updated.updated || memo.updated;
         setStatus(memo.pinned ? '已置顶' : '已取消置顶', 'ok');
-        renderMemos();
+        await loadMemos();
       } catch (err) {
         button.disabled = false;
         setStatus(err.message || '置顶失败', 'err');
@@ -1665,7 +1695,18 @@
     });
     publishMemoBtn.addEventListener('click', publishMemo);
     clearMemoBtn.addEventListener('click', clearMemoDraft);
-    memoSearchInput.addEventListener('input', renderMemos);
+    memoLoadMore.addEventListener('click', function() {
+      const append = memoRetryAppend === null ? true : memoRetryAppend;
+      loadMemos(append).catch(function(err) { setStatus(err.message || '加载失败', 'err'); });
+    });
+    memoSearchInput.addEventListener('input', function() {
+      clearTimeout(memoSearchTimer);
+      memoLoadVersion += 1;
+      memoLoadMore.disabled = true;
+      memoSearchTimer = setTimeout(function() {
+        loadMemos().catch(function(err) { setStatus(err.message || '搜索失败', 'err'); });
+      }, 250);
+    });
     memoInput.addEventListener('paste', handlePaste);
     pasteZone.addEventListener('paste', handlePaste);
     pasteZone.addEventListener('click', function() { pasteZone.focus(); });
