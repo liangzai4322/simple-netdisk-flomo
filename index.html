@@ -1070,21 +1070,37 @@
       });
     }
 
-    async function uploadOneFile(file, pass, onProgress) {
-      const fingerprint = await uploadFingerprint(file);
+    async function uploadOneFile(file, pass, onProgress, checkpoint) {
+      if (!checkpoint.fingerprint) checkpoint.fingerprint = await uploadFingerprint(file);
       assertUploadActive();
-      let state = await retryUpload(function() {
+      let state = await retryUpload(async function() {
+        if (checkpoint.id) {
+          try {
+            return await uploadRequest('/api/uploads/' + checkpoint.id, pass);
+          } catch (error) {
+            if (error.status !== 404) throw error;
+            checkpoint.id = null;
+          }
+        }
         return uploadRequest('/api/uploads', pass, { method: 'POST', body: JSON.stringify({
-          name: cleanName(file.name), size: file.size, last_modified: file.lastModified, fingerprint: fingerprint
+          name: cleanName(file.name), size: file.size, last_modified: file.lastModified, fingerprint: checkpoint.fingerprint
         }) });
       });
-      onProgress(state.offset);
+      function confirmProgress(snapshot) {
+        if (!snapshot || snapshot.size !== file.size || snapshot.name !== cleanName(file.name)
+            || !/^[a-f0-9]{64}$/.test(snapshot.id) || !Number.isSafeInteger(snapshot.offset)
+            || snapshot.offset < 0 || snapshot.offset > file.size) throw new Error('服务器上传进度异常');
+        checkpoint.id = snapshot.id;
+        checkpoint.confirmedBytes = snapshot.offset;
+        onProgress(snapshot.offset);
+      }
+      confirmProgress(state);
       while (!state.completed) {
         state = await retryUpload(async function(attempt) {
           assertUploadActive();
           if (attempt) {
             state = await uploadRequest('/api/uploads/' + state.id, pass);
-            onProgress(state.offset);
+            confirmProgress(state);
           }
           if (state.completed) return state;
           if (state.offset === file.size) {
@@ -1100,8 +1116,14 @@
           return uploadChunk('/api/uploads/' + state.id + '?offset=' + offset + '&sha256=' + hash,
             chunk, pass, function(loaded) { onProgress(offset + loaded); });
         });
-        onProgress(state.offset);
+        confirmProgress(state);
       }
+    }
+
+    function selectedUploadMatches(task, files) {
+      return task && files.length === task.files.length && files.every(function(file, index) {
+        return file === task.files[index];
+      });
     }
 
     function uploadFiles() {
@@ -1118,7 +1140,11 @@
         return;
       }
       rememberPassword();
-      activeUploadTask = { files: files, index: 0, completedBytes: 0,
+      if (selectedUploadMatches(activeUploadTask, files)) {
+        runUploadTask(activeUploadTask);
+        return;
+      }
+      activeUploadTask = { files: files, index: 0, completedBytes: 0, checkpoints: [],
         allBytes: files.reduce(function(sum, file) { return sum + file.size; }, 0) };
       runUploadTask(activeUploadTask);
     }
@@ -1134,20 +1160,27 @@
       uploadBtn.disabled = true;
       fileInput.disabled = true;
       uploadPauseBtn.hidden = false;
+      uploadPauseBtn.disabled = false;
       uploadPauseBtn.textContent = '暂停';
+      uploadBtn.textContent = '上传';
       try {
         const files = task.files;
         const allBytes = task.allBytes;
         for (; task.index < files.length; task.index += 1) {
           const file = files[task.index];
+          const checkpoint = task.checkpoints[task.index] || { confirmedBytes: 0 };
+          task.checkpoints[task.index] = checkpoint;
           setStatus('正在检查续传进度：' + file.name);
-          setUploadProgress(file.name, Math.floor(task.completedBytes / Math.max(allBytes, 1) * 100),
-            task.completedBytes, allBytes, task.index + 1, files.length);
+          if (!checkpoint.id) {
+            const loaded = task.completedBytes + checkpoint.confirmedBytes;
+            setUploadProgress(file.name, Math.min(99, Math.floor(loaded / Math.max(allBytes, 1) * 100)),
+              loaded, allBytes, task.index + 1, files.length);
+          }
           await uploadOneFile(file, pass, function(fileLoaded) {
             const loaded = task.completedBytes + fileLoaded;
             const percent = Math.min(99, Math.floor(loaded / Math.max(allBytes, 1) * 100));
             setUploadProgress(file.name, percent, loaded, allBytes, task.index + 1, files.length);
-          });
+          }, checkpoint);
           task.completedBytes += file.size;
         }
         setUploadProgress('全部文件上传完成', 100, allBytes, allBytes, files.length, files.length);
@@ -1160,10 +1193,12 @@
       } catch (err) {
         uploadPaused = true;
         uploadPauseBtn.textContent = '继续上传';
+        uploadBtn.textContent = selectedUploadMatches(task, Array.from(fileInput.files || [])) ? '继续上传' : '上传';
         setStatus(err.uploadPaused ? '已暂停，上传进度已保留' : (err.message || '上传中断') + '，可继续上传', err.uploadPaused ? '' : 'err');
         uploadProgress.classList.add('active');
       } finally {
         uploadRunning = false;
+        uploadPauseBtn.disabled = false;
         uploadBtn.disabled = false;
         fileInput.disabled = false;
       }
@@ -1175,9 +1210,14 @@
         return;
       }
       uploadPaused = true;
-      if (activeUploadXHR) activeUploadXHR.abort();
+      uploadPauseBtn.disabled = true;
       if (activeUploadRequest) activeUploadRequest.abort();
-      setStatus('正在暂停，上传进度会保留');
+      setStatus(activeUploadXHR ? '正在暂停，保存当前分块…' : '正在暂停，上传进度会保留');
+    });
+
+    fileInput.addEventListener('change', function() {
+      uploadBtn.textContent = !uploadRunning && selectedUploadMatches(activeUploadTask, Array.from(fileInput.files || []))
+        ? '继续上传' : '上传';
     });
 
     async function saveNote(path, input) {
