@@ -462,7 +462,12 @@
       border: 1px solid var(--line);
       border-radius: 10px;
       background: var(--panel);
+      flex-wrap: wrap;
     }
+    .schedule-modes { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+    .schedule-modes button { border: 0; border-radius: 0; background: #fff; }
+    .schedule-modes button + button { border-left: 1px solid var(--line); }
+    .schedule-modes button[aria-pressed="true"] { color: var(--accent); background: #eef5ff; font-weight: 700; }
     .schedule-title h2 { margin: 0 0 4px; font-size: 20px; }
     .schedule-title p { margin: 0; color: var(--muted); font-size: 13px; }
     .schedule-date-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -501,6 +506,12 @@
     .timeline-time { font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
     .timeline-preview { min-width: 0; color: var(--muted); line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .timeline-row.filled .timeline-preview { color: var(--text); }
+    .schedule-view[data-mode="periods"] .timeline-panel { max-height: none; padding: 0; border: 0; background: transparent; overflow: visible; }
+    .schedule-view[data-mode="periods"] .timeline-list { gap: 0; }
+    .schedule-view[data-mode="periods"] .timeline-row { grid-template-columns: minmax(0, 1fr); min-height: 160px; align-content: start; gap: 14px; padding: 22px 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+    .schedule-view[data-mode="periods"] .timeline-row.selected { background: #eef5ff; box-shadow: none; }
+    .schedule-view[data-mode="periods"] .timeline-time { font-size: 18px; }
+    .schedule-view[data-mode="periods"] .timeline-preview { white-space: pre-wrap; overflow: visible; overflow-wrap: anywhere; line-height: 1.8; }
     .schedule-editor-card { position: sticky; top: 82px; padding: 12px; }
     .schedule-editor-card h3 { margin: 0 0 6px; font-size: 20px; }
     .schedule-editor-card .hint { margin-bottom: 12px; }
@@ -639,11 +650,15 @@
       <div class="memo-pagination"><button id="memoLoadMore" type="button" hidden>加载更多</button></div>
       </aside>
     </div>
-    <section id="schedule" class="schedule-view" hidden>
+    <section id="schedule" class="schedule-view" data-mode="periods" hidden>
       <div class="schedule-head">
         <div class="schedule-title">
           <h2>日程消耗</h2>
           <p>不是计划表，而是如实记录时间实际流向哪里。</p>
+        </div>
+        <div class="schedule-modes" role="group" aria-label="记录模式">
+          <button type="button" data-schedule-mode="periods" aria-pressed="true">上下午</button>
+          <button type="button" data-schedule-mode="hourly" aria-pressed="false">按小时</button>
         </div>
         <div class="schedule-date-actions">
           <button id="schedulePrevDay" type="button">前一天</button>
@@ -653,14 +668,14 @@
         </div>
       </div>
       <div id="scheduleLayout" class="schedule-layout editor-collapsed">
-        <section class="timeline-panel" aria-label="24小时时间线">
+        <section class="timeline-panel" aria-label="日程记录">
           <div id="scheduleTimeline" class="timeline-list"></div>
         </section>
         <aside class="schedule-editor-card">
           <h3 id="scheduleSlotTitle">09:00–10:00</h3>
           <div id="scheduleReadOnlyHead" class="schedule-readonly-head" hidden><span class="hint">该时段已记录</span><button id="scheduleEdit" type="button">编辑</button></div>
-          <div id="scheduleReadOnly" class="schedule-readonly" hidden></div>
-          <div id="scheduleEditHint" class="hint">填写这个小时实际做了什么；支持多行。Ctrl+回车保存。</div>
+          <div id="scheduleReadOnly" class="schedule-readonly" title="双击编辑" role="button" tabindex="0" hidden></div>
+          <div id="scheduleEditHint" class="hint">记录实际做过的事情</div>
           <textarea id="scheduleEditor" maxlength="5000" placeholder="例如：起床，骑自行车赶路；路上听了《王川宝典》。"></textarea>
           <div class="schedule-editor-actions">
             <div class="schedule-slot-nav">
@@ -759,12 +774,15 @@
     let memoRetryAppend = null;
     let memoSearchTimer = null;
     let scheduleSlots = {};
+    let schedulePeriods = {};
+    let scheduleMode = 'periods';
     const SCHEDULE_VISIBLE_HOURS = Array.from({ length: 16 }, function(_, index) { return index + 9; });
     function normalizeScheduleHour(hour) {
       if (hour === 0) return 24;
       return SCHEDULE_VISIBLE_HOURS.includes(hour) ? hour : 9;
     }
     let selectedScheduleHour = normalizeScheduleHour(new Date().getHours());
+    let selectedSchedulePeriod = selectedScheduleHour >= 9 && selectedScheduleHour < 12 ? 'am' : 'pm';
     let scheduleDirty = false;
     let scheduleEditing = false;
     let schedulePanelOpen = false;
@@ -772,6 +790,8 @@
     const pendingScheduleWrites = new Map();
     const scheduleWriteChains = new Map();
     let scheduleLoadVersion = 0;
+    let scheduleLoading = false;
+    const scheduleDayCache = new Map();
     let appView = 'sync';
 
     function setStatus(text, kind) {
@@ -1681,40 +1701,83 @@
         : { date: workDate, hour: displayHour };
     }
 
+    function scheduleEntryKeys() {
+      return scheduleMode === 'periods' ? ['am', 'pm'] : SCHEDULE_VISIBLE_HOURS;
+    }
+
+    function selectedScheduleKey() {
+      return scheduleMode === 'periods' ? selectedSchedulePeriod : selectedScheduleHour;
+    }
+
+    function scheduleEntryLabel(key) {
+      return key === 'am' ? '上午' : key === 'pm' ? '下午' : scheduleHourLabel(key);
+    }
+
+    function scheduleEntryText(key) {
+      if (key !== 'am' && key !== 'pm') return scheduleSlots[String(key)] || '';
+      if (Object.prototype.hasOwnProperty.call(schedulePeriods, key)) return schedulePeriods[key];
+      return SCHEDULE_VISIBLE_HOURS.filter(function(hour) {
+        return key === 'am' ? hour < 12 : hour >= 12;
+      }).filter(function(hour) { return (scheduleSlots[String(hour)] || '').trim(); }).map(function(hour) {
+        return scheduleHourLabel(hour) + '\n' + scheduleSlots[String(hour)];
+      }).join('\n\n');
+    }
+
+    function cacheScheduleDay() {
+      if (loadedScheduleDate && !scheduleLoading) scheduleDayCache.set(loadedScheduleDate, { slots: scheduleSlots, periods: schedulePeriods });
+    }
+
     function renderScheduleTimeline() {
-      scheduleTimeline.innerHTML = '';
-      for (const hour of SCHEDULE_VISIBLE_HOURS) {
-        const text = scheduleSlots[String(hour)] || '';
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'timeline-row';
-        row.dataset.hour = String(hour);
-        if (text.trim()) row.classList.add('filled');
-        if (hour === selectedScheduleHour) row.classList.add('selected');
-        const time = document.createElement('span');
-        time.className = 'timeline-time';
-        time.textContent = scheduleHourLabel(hour);
-        const preview = document.createElement('span');
-        preview.className = 'timeline-preview';
-        preview.textContent = text.trim() ? text.trim().replace(/\s*\n\s*/g, ' · ') : '未记录';
-        row.appendChild(time);
-        row.appendChild(preview);
-        row.addEventListener('click', function() { selectScheduleHour(hour, true); });
-        scheduleTimeline.appendChild(row);
+      const keys = scheduleEntryKeys();
+      const rows = Array.from(scheduleTimeline.children);
+      if (rows.length !== keys.length || rows.some(function(row, index) { return row.dataset.entry !== String(keys[index]); })) {
+        scheduleTimeline.innerHTML = '';
+        for (const key of keys) {
+          const row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'timeline-row';
+          row.dataset.entry = String(key);
+          row.title = '双击编辑';
+          const time = document.createElement('span');
+          time.className = 'timeline-time';
+          const preview = document.createElement('span');
+          preview.className = 'timeline-preview';
+          row.appendChild(time);
+          row.appendChild(preview);
+          row.addEventListener('click', function() { selectScheduleHour(key, true); });
+          row.addEventListener('dblclick', function() {
+            if (selectScheduleHour(key, true)) beginScheduleEdit();
+          });
+          scheduleTimeline.appendChild(row);
+        }
+      }
+      for (const [index, key] of keys.entries()) {
+        const row = scheduleTimeline.children[index];
+        const text = scheduleEntryText(key);
+        row.classList.toggle('filled', !!text.trim());
+        row.disabled = scheduleLoading;
+        row.classList.toggle('selected', key === selectedScheduleKey());
+        row.setAttribute('aria-label', scheduleEntryLabel(key));
+        row.querySelector('.timeline-time').textContent = scheduleEntryLabel(key);
+        row.querySelector('.timeline-preview').textContent = scheduleLoading ? '加载中…' : text.trim()
+          ? scheduleMode === 'periods' ? text : text.trim().replace(/\s*\n\s*/g, ' · ') : '未记录';
       }
     }
 
     function scrollSelectedScheduleIntoView() {
       const selected = scheduleTimeline.querySelector('.timeline-row.selected');
       const panel = scheduleTimeline.closest('.timeline-panel');
-      if (!selected || !panel) return;
+      if (!selected || !panel || scheduleMode === 'periods') return;
       const targetTop = selected.offsetTop - (panel.clientHeight / 2) + (selected.offsetHeight / 2);
       panel.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
     }
 
     function fillScheduleEditor(forceEdit) {
-      const text = scheduleSlots[String(selectedScheduleHour)] || '';
-      scheduleSlotTitle.textContent = scheduleHourLabel(selectedScheduleHour);
+      const text = scheduleEntryText(selectedScheduleKey());
+      scheduleSlotTitle.textContent = scheduleEntryLabel(selectedScheduleKey());
+      scheduleEditor.maxLength = scheduleMode === 'periods' ? 100000 : 5000;
+      scheduleEditor.disabled = scheduleLoading;
+      scheduleSave.disabled = scheduleLoading;
       scheduleEditor.value = text;
       scheduleDirty = false;
       scheduleEditing = !!forceEdit || !text.trim();
@@ -1724,7 +1787,25 @@
       scheduleReadOnly.hidden = scheduleEditing;
       scheduleReadOnlyHead.hidden = scheduleEditing;
       scheduleReadOnly.textContent = text;
-      scheduleSaveState.textContent = text.trim() ? '已保存' : '尚未记录';
+      updateScheduleSaveState();
+    }
+
+    function beginScheduleEdit() {
+      schedulePanelOpen = true;
+      scheduleLayout.classList.remove('editor-collapsed');
+      if (!scheduleEditing) fillScheduleEditor(true);
+      scheduleEditor.focus();
+      scheduleEditor.setSelectionRange(scheduleEditor.value.length, scheduleEditor.value.length);
+    }
+
+    function updateScheduleSaveState() {
+      const target = scheduleStorageTarget(loadedScheduleDate || scheduleDate.value, selectedScheduleKey());
+      const pending = pendingScheduleWrites.get(scheduleWriteKey(target.date, target.hour));
+      scheduleSave.textContent = !scheduleDirty && pending && pending.state === 'failed' ? '重试' : '保存';
+      scheduleSave.hidden = !scheduleEditing && !(pending && pending.state === 'failed');
+      scheduleSaveState.textContent = scheduleDirty ? '待保存' : pending
+        ? pending.state === 'saving' ? '后台保存中…' : pending.state === 'failed' ? '保存失败，内容已保留' : '已保存'
+        : scheduleEntryText(selectedScheduleKey()).trim() ? '已保存' : '尚未记录';
     }
 
     function scheduleWriteKey(dateKey, hour) {
@@ -1742,7 +1823,7 @@
       const target = scheduleStorageTarget(workDate, displayHour);
       const key = scheduleWriteKey(target.date, target.hour);
       const token = Symbol(key);
-      pendingScheduleWrites.set(key, { token: token, text: text });
+      pendingScheduleWrites.set(key, { token: token, text: text, state: 'saving' });
       scheduleSaveState.textContent = '后台保存中…';
       const previous = scheduleWriteChains.get(key) || Promise.resolve();
       const write = previous.catch(function() {}).then(function() {
@@ -1755,14 +1836,14 @@
       scheduleWriteChains.set(key, write);
       write.then(function() {
         const pending = pendingScheduleWrites.get(key);
-        if (pending && pending.token === token) pendingScheduleWrites.delete(key);
+        if (pending && pending.token === token) pending.state = 'saved';
         if (scheduleWriteChains.get(key) === write) scheduleWriteChains.delete(key);
-        scheduleSaveState.textContent = '已保存';
+        updateScheduleSaveState();
       }).catch(function(err) {
         const pending = pendingScheduleWrites.get(key);
-        if (pending && pending.token === token) pendingScheduleWrites.delete(key);
+        if (pending && pending.token === token) pending.state = 'failed';
         if (scheduleWriteChains.get(key) === write) scheduleWriteChains.delete(key);
-        scheduleSaveState.textContent = '保存失败，内容仍保留在页面';
+        updateScheduleSaveState();
         setStatus(err.message || '日程保存失败', 'err');
       });
       return true;
@@ -1771,42 +1852,62 @@
     function commitCurrentScheduleDraft() {
       if (!scheduleDirty) return true;
       const text = scheduleEditor.value;
-      if (!queueScheduleWrite(loadedScheduleDate || scheduleDate.value, selectedScheduleHour, text)) return false;
-      if (text.trim()) scheduleSlots[String(selectedScheduleHour)] = text;
-      else delete scheduleSlots[String(selectedScheduleHour)];
+      const key = selectedScheduleKey();
+      if (!queueScheduleWrite(loadedScheduleDate || scheduleDate.value, key, text)) return false;
+      if (scheduleMode === 'periods') schedulePeriods[key] = text;
+      else if (text.trim()) scheduleSlots[String(key)] = text;
+      else delete scheduleSlots[String(key)];
       scheduleDirty = false;
+      cacheScheduleDay();
       renderScheduleTimeline();
       return true;
     }
 
     function selectScheduleHour(hour, openPanel) {
-      if (!SCHEDULE_VISIBLE_HOURS.includes(hour)) return true;
-      if (hour === selectedScheduleHour) {
-        if (openPanel) {
-          schedulePanelOpen = true;
-          scheduleLayout.classList.remove('editor-collapsed');
-          fillScheduleEditor(false);
-        }
-        return true;
-      }
-      if (!commitCurrentScheduleDraft()) return false;
-      selectedScheduleHour = hour;
+      if (scheduleLoading || !scheduleEntryKeys().includes(hour)) return false;
+      const changed = hour !== selectedScheduleKey();
+      const wasOpen = schedulePanelOpen;
+      if (changed && !commitCurrentScheduleDraft()) return false;
+      if (scheduleMode === 'periods') selectedSchedulePeriod = hour;
+      else selectedScheduleHour = hour;
       if (openPanel) {
         schedulePanelOpen = true;
         scheduleLayout.classList.remove('editor-collapsed');
       }
       renderScheduleTimeline();
-      if (schedulePanelOpen) fillScheduleEditor(false);
+      if (schedulePanelOpen && (changed || !wasOpen)) fillScheduleEditor(false);
       requestAnimationFrame(scrollSelectedScheduleIntoView);
       return true;
+    }
+
+    function setScheduleMode(mode) {
+      if (mode !== 'periods' && mode !== 'hourly' || mode === scheduleMode) return;
+      if (!commitCurrentScheduleDraft()) return;
+      scheduleMode = mode;
+      scheduleView.dataset.mode = mode;
+      document.querySelectorAll('[data-schedule-mode]').forEach(function(button) {
+        button.setAttribute('aria-pressed', String(button.dataset.scheduleMode === mode));
+      });
+      schedulePanelOpen = false;
+      scheduleLayout.classList.add('editor-collapsed');
+      renderScheduleTimeline();
+      fillScheduleEditor(false);
+      requestAnimationFrame(scrollSelectedScheduleIntoView);
     }
 
     async function loadScheduleDay() {
       const dateKey = scheduleDate.value;
       if (!dateKey) return;
-      commitCurrentScheduleDraft();
+      if (!commitCurrentScheduleDraft()) return;
+      cacheScheduleDay();
       loadedScheduleDate = dateKey;
       const loadVersion = ++scheduleLoadVersion;
+      const cached = scheduleDayCache.get(dateKey);
+      scheduleSlots = cached ? Object.assign({}, cached.slots) : {};
+      schedulePeriods = cached ? Object.assign({}, cached.periods) : {};
+      scheduleLoading = !cached;
+      renderScheduleTimeline();
+      if (schedulePanelOpen) fillScheduleEditor(false);
       const nextDate = addDaysToDateKey(dateKey, 1);
       setStatus('正在加载日程');
       const responses = await Promise.all([
@@ -1817,6 +1918,7 @@
       if (loadVersion !== scheduleLoadVersion || dateKey !== scheduleDate.value) return;
       const daySlots = values[0] && values[0].slots && typeof values[0].slots === 'object' ? values[0].slots : {};
       const nextSlots = values[1] && values[1].slots && typeof values[1].slots === 'object' ? values[1].slots : {};
+      const periods = Object.assign({}, values[0] && values[0].periods || {});
       const merged = {};
       for (let hour = 9; hour <= 23; hour += 1) if (daySlots[String(hour)]) merged[String(hour)] = daySlots[String(hour)];
       if (nextSlots['0']) merged['24'] = nextSlots['0'];
@@ -1825,7 +1927,8 @@
         const nextZero = nextDate + '/0';
         if (key.startsWith(dayPrefix)) {
           const hour = key.slice(dayPrefix.length);
-          if (Number(hour) >= 9) {
+          if (hour === 'am' || hour === 'pm') periods[hour] = pending.text;
+          else if (Number(hour) >= 9) {
             if (pending.text.trim()) merged[hour] = pending.text;
             else delete merged[hour];
           }
@@ -1835,14 +1938,23 @@
         }
       }
       scheduleSlots = merged;
+      schedulePeriods = periods;
+      scheduleLoading = false;
+      cacheScheduleDay();
       renderScheduleTimeline();
-      if (schedulePanelOpen) fillScheduleEditor(false);
+      if (schedulePanelOpen && !scheduleDirty) fillScheduleEditor(false);
       requestAnimationFrame(scrollSelectedScheduleIntoView);
       setStatus('日程已更新', 'ok');
     }
 
     function saveScheduleSlot() {
-      if (!scheduleDirty) return true;
+      if (scheduleLoading) return false;
+      if (!scheduleDirty) {
+        const target = scheduleStorageTarget(loadedScheduleDate || scheduleDate.value, selectedScheduleKey());
+        const pending = pendingScheduleWrites.get(scheduleWriteKey(target.date, target.hour));
+        if (pending && pending.state === 'failed') return queueScheduleWrite(loadedScheduleDate, selectedScheduleKey(), pending.text);
+        return true;
+      }
       const saved = commitCurrentScheduleDraft();
       if (saved) fillScheduleEditor(false);
       return saved;
@@ -1855,9 +1967,10 @@
     }
 
     function moveScheduleSlot(delta) {
-      const currentIndex = SCHEDULE_VISIBLE_HOURS.indexOf(selectedScheduleHour);
-      const nextIndex = Math.max(0, Math.min(SCHEDULE_VISIBLE_HOURS.length - 1, currentIndex + delta));
-      selectScheduleHour(SCHEDULE_VISIBLE_HOURS[nextIndex], true);
+      const keys = scheduleEntryKeys();
+      const currentIndex = keys.indexOf(selectedScheduleKey());
+      const nextIndex = Math.max(0, Math.min(keys.length - 1, currentIndex + delta));
+      selectScheduleHour(keys[nextIndex], true);
     }
 
     function setAppView(view) {
@@ -1929,10 +2042,13 @@
       setAppView(appView === 'schedule' ? 'sync' : 'schedule');
     });
     scheduleSave.addEventListener('click', saveScheduleSlot);
-    scheduleEdit.addEventListener('click', function() {
-      fillScheduleEditor(true);
-      scheduleEditor.focus();
-      scheduleEditor.setSelectionRange(scheduleEditor.value.length, scheduleEditor.value.length);
+    scheduleEdit.addEventListener('click', beginScheduleEdit);
+    scheduleReadOnly.addEventListener('dblclick', beginScheduleEdit);
+    scheduleReadOnly.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') { event.preventDefault(); beginScheduleEdit(); }
+    });
+    document.querySelectorAll('[data-schedule-mode]').forEach(function(button) {
+      button.addEventListener('click', function() { setScheduleMode(button.dataset.scheduleMode); });
     });
     scheduleEditor.addEventListener('input', function() {
       scheduleDirty = true;
