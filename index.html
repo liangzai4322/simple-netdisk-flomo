@@ -940,6 +940,7 @@
         const sizeCell = document.createElement('td');
         sizeCell.className = 'size-cell';
         sizeCell.textContent = item.isDir ? '-' : formatSize(item.size);
+        sizeCell.title = item.storage === 'drive' ? 'Google Drive' : '服务器';
 
         const timeCell = document.createElement('td');
         timeCell.className = 'time-cell';
@@ -1123,6 +1124,18 @@
             confirmProgress(state);
           }
           if (state.completed) return state;
+          if (state.processing) {
+            setStatus('正在转存到 Google Drive · ' + file.name);
+            await new Promise(function(resolve) { setTimeout(resolve, 1500); });
+            assertUploadActive();
+            const next = await uploadRequest('/api/uploads/' + state.id, pass);
+            if (next.error && !next.processing && !next.completed) {
+              const failure = new Error(next.error);
+              failure.status = 422;
+              throw failure;
+            }
+            return next;
+          }
           if (state.offset === file.size) {
             setStatus('正在完成 ' + file.name);
             return uploadRequest('/api/uploads/' + state.id + '/complete', pass, { method: 'POST', body: '{}' });
