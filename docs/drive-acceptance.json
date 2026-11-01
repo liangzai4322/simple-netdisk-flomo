@@ -1,0 +1,68 @@
+{
+  "verified_at": "2026-11-01T13:26:50.062853+00:00",
+  "result": "passed",
+  "threshold_bytes": 30000000,
+  "routes": {
+    "less_or_equal": "server",
+    "greater": "drive"
+  },
+  "oauth": {
+    "scope": "https://www.googleapis.com/auth/drive.file",
+    "publishing_status": "production",
+    "server_credentials_permissions": "0700 directory / 0600 SQLite",
+    "temporary_refresh_token_copies_removed": true
+  },
+  "acceptance": {
+    "started": "2026-11-01T22:19:14+0900",
+    "base": "https://liangzai666.com/pan-api",
+    "files": [
+      {
+        "name": "codex-drive-acceptance-20261101-221916-server.bin",
+        "size": 4096,
+        "expected_storage": "server",
+        "sha256": "0ca828287880ce048920d2ef5e39c5b773409af1fcb04d1fe17ff2a73f668829",
+        "upload_id": "d87d96b0a81fb97b8a02b8d1faee067bf3047f759d0ab021cea8669ffd64aa8b",
+        "client_upload_seconds": 3.944,
+        "drive_transfer_seconds": 2.119,
+        "actual_storage": "server",
+        "download_seconds": 2.193,
+        "download_bytes": 4096,
+        "hash_match": true,
+        "test_file_removed": true
+      },
+      {
+        "name": "codex-drive-acceptance-20261101-221930-drive.bin",
+        "size": 30000001,
+        "expected_storage": "drive",
+        "sha256": "ace047afd9917ccc3c5fd07db2fc911a2852dbc0edfd682fe36a773599b68296",
+        "upload_id": "fec9baa297e9a54982b08b4b65cd69556fdda45943c967d74952e97a22c055bc",
+        "client_upload_seconds": 138.095,
+        "drive_transfer_seconds": 89.64,
+        "actual_storage": "drive",
+        "download_seconds": 93.532,
+        "download_bytes": 30000001,
+        "hash_match": true,
+        "test_file_removed": true
+      }
+    ],
+    "initial_items": 118,
+    "final_items": 118,
+    "status": "passed"
+  },
+  "performance": {
+    "max_service_memory_bytes": 108027904,
+    "max_python_rss_kib": 27996,
+    "max_gdirect_rss_kib": 72428,
+    "samples": 291
+  },
+  "post_test": {
+    "service": "active",
+    "restarts": 0,
+    "memory_current_bytes": 16302080,
+    "drive_ready": true
+  },
+  "backend_sha256": {
+    "simple_netdisk_app.py": "a99a85b8ff6f6a10766aa62d35b86e68bb659a2f28548941ae3cb37fde751588",
+    "drive_storage.py": "65dec38ae526532946f5f3bcd54858937525f79bf9b63a621a45f93f9d967c5a"
+  }
+}
