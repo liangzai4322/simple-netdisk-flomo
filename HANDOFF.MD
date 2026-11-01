@@ -10,7 +10,8 @@
 - 指定账号已在 Chrome 的“同学”资料中核对；另一个 Chrome 扩展连接的资料是其他账号，禁止在其 Drive 操作。
 - 已创建 Cloud 专用项目 `simple-netdisk-drive`（ID `planar-catbird-513410-q0`）；OAuth 应用表单准备到最终“创建”，尚未提交。
 - Google OAuth 客户端、Drive 数据权限与生产发布设置尚未建立。浏览器工具要求在创建长期访问前单独确认，已向用户发起 `drive.file` 范围确认，等待答复。
-- 服务器原后端保持运行；新代码放在 `/opt/simple-netdisk/staging-drive/`，尚未启用。
+- 服务器原后端保持运行；新代码放在 `/opt/simple-netdisk/staging-drive/`，尚未启用。服务 drop-in 和凭据空目录已准备，未执行后端切换。
+- 前端代码提交 `845c889` 已推送，Pages build 为 built；线上 HTML 已读到转存状态与错误处理的新代码。
 
 ## 代码与部署
 
@@ -29,7 +30,7 @@
 - 后端 Python 和前端 JavaScript 语法通过。
 - 服务器隔离目录和独立端口完成小文件上传、完成、列表、下载内容比较、删除。测试临时目录和进程已清理。
 - Linux gdirect --version 为 0.9.0。下载包对应哈希与上游 SHA256SUMS 一致。
-- Drive 真实文件传输、生产分流、GitHub Pages 新版部署还未验收。
+- Drive 真实文件传输和生产大文件分流尚未验收；前端部署已验证到提交 845c889。
 
 ## 待执行
 
@@ -37,7 +38,7 @@
 2. 用指定 Chrome 账号打开授权脚本产生的 URL，核对权限并完成授权；将 authorized_user 凭据导入服务器的独立 gdirect DB，核对 accounts 为指定账号。
 3. 通过 Google API 创建私有 `simple-netdisk` 文件夹，保存 folder-id；不用共享链接或公开文件权限。
 4. 重新打包最新 backend（特别是环境账号配置），复制到 staging-drive，配置服务 drop-in，切换并重启本服务。
-5. 发布前端与代码，确认 Pages build；只做一份真实小文件和一份 >30 MB 文件的上传、列表、下载/hash，清理本次测试文件。
+5. 前端已部署；后续若改动代码再发布。只做一份真实小文件和一份 >30 MB 文件的上传、列表、下载/hash，清理本次测试文件。
 6. 更新当前状态与真实证据。Drive 文件已存在后不能直接恢复不识别 Drive 的旧代码。
 
 ## 本次踩坑
