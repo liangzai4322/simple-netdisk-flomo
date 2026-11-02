@@ -28,6 +28,7 @@ UPLOAD_DIR = Path(os.environ.get("SIMPLE_NETDISK_UPLOADS", str(ROOT.parent / "up
 UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024
 UPLOAD_LOCKS = [threading.Lock() for _ in range(64)]
 ACTIVE_TRANSFERS = set()
+ALLOW_SERVER_FALLBACK = True
 DRIVE = DriveStorage(ROOT.parent)
 PASSWORD = os.environ.get("SIMPLE_NETDISK_PASSWORD", "")
 HOST = os.environ.get("SIMPLE_NETDISK_HOST", "127.0.0.1")
@@ -101,9 +102,11 @@ def upload_snapshot(upload_id: str, meta: dict) -> dict:
     offset = meta["size"] if completed else partial.stat().st_size if partial.exists() else 0
     return {"id": upload_id, "name": meta["name"], "size": meta["size"],
             "offset": offset, "completed": completed, "chunk_size": UPLOAD_CHUNK_SIZE,
-            "storage": entry and "drive" if completed and entry else storage_for_size(meta["size"]),
+            "storage": ("drive" if entry else "server") if completed else meta.get("storage", storage_for_size(meta["size"])),
             "processing": not completed and upload_id in ACTIVE_TRANSFERS,
-            "error": meta.get("drive_error", "")}
+            "error": meta.get("drive_error", ""),
+            "can_fallback": meta.get("can_fallback", False),
+            "fallback_reason": meta.get("fallback_reason", "")}
 
 
 def cleanup_drive_file(file_id: str) -> None:
@@ -111,6 +114,22 @@ def cleanup_drive_file(file_id: str) -> None:
         DRIVE.trash(file_id)
     except DriveError:
         print("Drive replaced-file cleanup failed; file_id=" + file_id, flush=True)
+
+
+def finish_server_upload(upload_id, meta):
+    _, partial = upload_paths(upload_id)
+    stat = partial.stat()
+    meta.update({"phase": "finalizing", "storage": "server", "drive_error": "",
+                 "inode": stat.st_ino, "mtime_ns": stat.st_mtime_ns})
+    save_upload_meta(upload_id, meta)
+    ROOT.mkdir(parents=True, exist_ok=True)
+    os.replace(partial, upload_target(meta))
+    previous = DRIVE.remove("/" + meta["name"])
+    meta["phase"] = "complete"
+    save_upload_meta(upload_id, meta)
+    if previous:
+        # A cloud outage must not delay publishing the server fallback.
+        threading.Thread(target=cleanup_drive_file, args=(previous["id"],), daemon=True).start()
 
 
 def finish_drive_upload(upload_id: str) -> None:
@@ -130,7 +149,15 @@ def finish_drive_upload(upload_id: str) -> None:
     except Exception as exc:
         with lock:
             meta = load_upload_meta(upload_id)
-            meta.update({"phase": "failed", "drive_error": str(exc) if isinstance(exc, DriveError) else "Drive 转存失败，上传进度已保留"})
+            if isinstance(exc, DriveError) and ALLOW_SERVER_FALLBACK:
+                try:
+                    meta["fallback_reason"] = "Drive 暂不可用，已保存到服务器"
+                    finish_server_upload(upload_id, meta)
+                    return
+                except OSError:
+                    exc = RuntimeError("服务器兜底存储失败，上传进度已保留")
+            meta.update({"phase": "failed", "drive_error": str(exc) if isinstance(exc, DriveError) else "上传完成失败，进度已保留",
+                         "can_fallback": isinstance(exc, DriveError)})
             save_upload_meta(upload_id, meta)
     finally:
         with lock:
@@ -401,7 +428,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlsplit(self.path)
         if parsed.path in ("/health", "/healthz"):
-            self.send_json(200, {"ok": True, "drive_ready": DRIVE.ready(), "drive_threshold_bytes": THRESHOLD})
+            self.send_json(200, {"ok": True, "drive_ready": DRIVE.ready(), "drive_threshold_bytes": THRESHOLD,
+                                 "storage_priority": ["drive", "server"], "server_fallback": True})
             return
         if parsed.path.startswith("/api/uploads/"):
             self.handle_resumable_upload("status", parsed)
@@ -535,7 +563,7 @@ class Handler(BaseHTTPRequestHandler):
                 cleanup_drive_file(previous["id"])
             self.send_json(200, {"completed": True, "storage": "drive", "size": size})
         except DriveError as exc:
-            self.send_json(503, {"message": str(exc)})
+            self.send_json(503, {"message": str(exc), "can_fallback": True})
         except (ValueError, TypeError, KeyError):
             self.send_json(400, {"message": "invalid accelerator request"})
         except OSError:
@@ -613,7 +641,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     self.send_json(200, upload_snapshot(upload_id, meta))
         except DriveError as exc:
-            self.send_json(503, {"message": str(exc)})
+            self.send_json(503, {"message": str(exc), "can_fallback": True})
         except FileNotFoundError:
             self.send_json(404, {"message": "upload not found"})
         except (ValueError, TypeError, KeyError) as exc:
@@ -630,9 +658,15 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("invalid file size")
         if type(meta["last_modified"]) is not int or not isinstance(meta["fingerprint"], str) or not SAFE_UPLOAD_ID_RE.fullmatch(meta["fingerprint"]):
             raise ValueError("invalid file fingerprint")
+        if data.get("fallback_to_server") is True:
+            if not ALLOW_SERVER_FALLBACK:
+                raise ValueError("server fallback requires the server endpoint")
+            meta.update(storage="server", fallback_reason="直连通道不可用，已使用服务器兜底")
         upload_id = hashlib.sha256(json_bytes(meta)).hexdigest()
-        if storage_for_size(meta["size"]) == "drive" and not DRIVE.ready():
-            raise DriveError("大于 30 MB 的文件需要 Drive 授权；小文件可正常上传")
+        if not DRIVE.ready():
+            if not ALLOW_SERVER_FALLBACK:
+                raise DriveError("Drive 暂不可用，可使用服务器通道")
+            meta.update(storage="server", fallback_reason="Drive 尚未就绪，已使用服务器兜底")
         lock = UPLOAD_LOCKS[int(upload_id[:2], 16) % len(UPLOAD_LOCKS)]
         with lock:
             path, partial = upload_paths(upload_id)
@@ -701,26 +735,22 @@ class Handler(BaseHTTPRequestHandler):
         if not partial.exists() or partial.stat().st_size != meta["size"]:
             self.send_json(409, {"message": "upload is incomplete", **snapshot})
             return
-        if storage_for_size(partial.stat().st_size) == "drive":
+        if meta.get("storage", storage_for_size(partial.stat().st_size)) == "drive":
             if upload_id not in ACTIVE_TRANSFERS:
                 if not DRIVE.ready():
-                    raise DriveError("大文件存储尚未授权，上传进度已保留")
+                    if not ALLOW_SERVER_FALLBACK:
+                        raise DriveError("Drive 暂不可用，可使用服务器通道")
+                    meta["fallback_reason"] = "Drive 尚未就绪，已使用服务器兜底"
+                    finish_server_upload(upload_id, meta)
+                    self.send_json(200, upload_snapshot(upload_id, meta))
+                    return
                 meta.update({"phase": "transferring", "drive_error": ""})
                 save_upload_meta(upload_id, meta)
                 ACTIVE_TRANSFERS.add(upload_id)
                 threading.Thread(target=finish_drive_upload, args=(upload_id,), daemon=True).start()
             self.send_json(200, upload_snapshot(upload_id, meta))
             return
-        stat = partial.stat()
-        meta.update({"phase": "finalizing", "inode": stat.st_ino, "mtime_ns": stat.st_mtime_ns})
-        save_upload_meta(upload_id, meta)
-        ROOT.mkdir(parents=True, exist_ok=True)
-        os.replace(partial, upload_target(meta))
-        previous = DRIVE.remove("/" + meta["name"])
-        if previous:
-            cleanup_drive_file(previous["id"])
-        meta["phase"] = "complete"
-        save_upload_meta(upload_id, meta)
+        finish_server_upload(upload_id, meta)
         self.send_json(200, upload_snapshot(upload_id, meta))
 
     def list_memos(self, query: dict) -> None:
@@ -976,7 +1006,8 @@ class Handler(BaseHTTPRequestHandler):
                                      "size": entry["size"], "modified": entry["modified"],
                                      "isDir": False, "note": notes.get(entry["path"], ""), "storage": "drive"}
         items = sorted(merged.values(), key=lambda item: item["modified"], reverse=True)
-        self.send_json(200, {"items": items, "drive_ready": DRIVE.ready(), "drive_threshold_bytes": THRESHOLD})
+        self.send_json(200, {"items": items, "drive_ready": DRIVE.ready(), "drive_threshold_bytes": THRESHOLD,
+                             "storage_priority": ["drive", "server"], "server_fallback": True})
 
     def download(self, raw: str) -> None:
         try:
@@ -1078,15 +1109,18 @@ class Handler(BaseHTTPRequestHandler):
             partial = Path(temp_name)
             storage = storage_for_size(partial.stat().st_size)
             if storage == "drive":
-                file_id = DRIVE.upload(partial, target.name)
-                previous = DRIVE.put(relative_key(target), file_id, partial.stat().st_size, None)
-                target.unlink(missing_ok=True)
-                partial.unlink()
-            else:
+                try:
+                    file_id = DRIVE.upload(partial, target.name)
+                    previous = DRIVE.put(relative_key(target), file_id, partial.stat().st_size, None)
+                    target.unlink(missing_ok=True)
+                    partial.unlink()
+                except DriveError:
+                    storage = "server"
+            if storage == "server":
                 os.replace(temp_name, target)
                 previous = DRIVE.remove(relative_key(target))
             if previous:
-                cleanup_drive_file(previous["id"])
+                threading.Thread(target=cleanup_drive_file, args=(previous["id"],), daemon=True).start()
             self.send_json(200, {"ok": True, "name": target.name, "storage": storage})
         except Exception as exc:
             if temp_name:

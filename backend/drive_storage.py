@@ -1,4 +1,4 @@
-"""Private Drive storage for large netdisk files. No third-party relay is used."""
+"""Primary private Drive storage. The application keeps server storage as fallback."""
 import datetime as dt
 import json
 import os
@@ -14,7 +14,9 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 
-THRESHOLD = 30_000_000
+# Compatibility field for clients using size > threshold: every valid size,
+# including an empty file, now prefers Drive.
+THRESHOLD = -1
 ACCOUNT = os.environ.get("SIMPLE_NETDISK_GOOGLE_ACCOUNT", "")
 
 

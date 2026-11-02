@@ -1,10 +1,10 @@
-# Google Drive 大文件接入交接
+# Google Drive 优先与服务器兜底交接
 
 更新：2026-11-02（Asia/Tokyo）
 
 ## 目标与当前状态
 
-- 用户已授权实施并部署：新文件 >30,000,000 字节走 Drive，≤阈值仍在原服务器。旧文件不迁移。
+- 用户最新明确授权：所有新文件优先走 Google Drive；Drive 不可用时服务器兜底。取消 30 MB 分流，旧文件不迁移。最新部署与验收见文末。
 - 先写的方案为 `docs/drive-integration.md`。研究目录另有原始方案和研究 HTML。
 - 已部署：两种存储列表/备注/下载/删除，原分片续传接后台 gdirect 转存；前端处理后台转存轮询。
 - 指定账号已在 Chrome 的“同学”资料中核对；另一个 Chrome 扩展连接的资料是其他账号，禁止在其 Drive 操作。
@@ -80,7 +80,7 @@
 - 用户明确要求真正直连测试；足够快时考虑小于 30 MB 也使用 Drive，并接入加速。已单会话实施，没有委派。
 - 用 `IP_BOUND_IF` 将测速进程 Internet socket 绑定 en1（index 17），每次校验绑定值；物理接口路由经 192.168.1.1。系统代理和 TUN 保持原状。仅 Google GTS 根证书与 Google 节点；不启用第三方中继。
 - 直连 30,000,001 字节：下载 9.571 秒 / 3.1344 MB/s；上传 35.139 秒 / 0.8537 MB/s。1 MB：上传 3.815 秒，下载 4.219 秒。SHA-256/MD5 与大小均匹配，三个合成 Drive 文件已移回回收站，本地副本已清理。
-- 相同 1 MB 服务器路径：上传 8.430 秒，下载 3.035 秒，内容一致并清理。因此小文件上传更快、下载稍慢，已向用户询问是否全部切 Drive；尚未收到选择，默认保持原阈值。
+- 相同 1 MB 服务器路径：上传 8.430 秒，下载 3.035 秒，内容一致并清理。因此小文件上传更快、下载稍慢，已向用户询问是否全部切 Drive；随后用户明确选择所有新文件优先 Drive，并增加服务器兜底要求，已按新决定更新。
 - 证据目录 `/Volumes/Samsung SSD/page/202610/outputs/20261102-netdisk-physical-direct/`。第一次固定端点连接失败，记录单列为 `failed-first-endpoint.json/.log`；失败样本的 MB/s 为 null。后续使用已核验端点缓存自动选择完成全部传输。117 个端点通过绑定网卡的 Google TLS + Drive API 探测，不能将这一探测等同于持续文件测速。
 - 本轮代码：`scripts/native_accelerator.py` 复用原上传分片/续传，使用本机 gdirect 直传与 8 连接下载；`scripts/bind_physical.c` 仅绑定子进程。后端增加配对 broker，网页收不到 Google 写令牌，刷新令牌仍只在服务器。
 - 原生组件 `/Volumes/Samsung SSD/Applications/simple-netdisk-accelerator/`；本机配置 `~/Library/Application Support/simple-netdisk-accelerator/config.json` 0600；大文件分片在 SSD Inbox/.simple-netdisk-accelerator，下载在 Inbox/无痕同步下载。配置含配对密钥与本网盘密码，不输出、不提交。
@@ -96,3 +96,13 @@
 - 最终 HTML 报告：`/Volumes/Samsung SSD/page/202610/outputs/20261102-netdisk-physical-direct/index.html`。原始数据与集成验收记录位于同目录。
 
 - 初版 `.private/deploy_accelerator.py` 含已否定的 LaunchAgent 实验，不作为更新入口；更新组件文件后使用安装目录的 `start_accelerator.py` / `启动加速.command`。当前启动器会先探测组件，已运行时不会重复启动。
+
+## 2026-11-02 全文件 Drive 优先、服务器兜底
+
+- 授权来自用户明确回复“所有新文件都存 Drive”及后续“第一优先是谷歌云，然后才是这个自带的”。本次实现自动上传兜底，不建立历史文件的服务器副本。
+- 兼容字段 THRESHOLD / drive_threshold_bytes 改为 -1；health/list 返回 storage_priority=[drive,server] 与 server_fallback=true。所有新文件先尝试 Drive；旧文件仍按原映射读取。
+- 普通通道：Drive 未就绪时直接保存服务器；实际 Drive 上传失败时原子提交已接收分片到服务器，回报实际 storage=server。
+- 原生组件关闭“本机当服务器”的兜底；其明确 DriveError 返回 can_fallback=true，由网页将原文件通过服务器通道上传，并明确 fallback_to_server=true，避免重复尝试故障 Drive。完成后清理失败的本机分片。
+- 原生下载失败时网页自动尝试原服务器下载入口；对于仅存在 Drive 且云端整体不可用的历史文件，服务器没有凭空的副本可读。
+- 服务器源码备份后缀 bak-20261102-priority；本机组件同步更新并重启。隔离测试已覆盖云上传失败、空文件失败、未就绪、显式服务器兜底和原生失败信号；前端路由切换测试通过。公网 1 MB 默认上传实际存 Drive、4 KB 显式兜底实际存服务器，下载 SHA-256 均一致，测试文件与分片已清理；前后列表均 127 项，原文件名称、大小、存储类型不变。
+- 本轮证据目录：/Volumes/Samsung SSD/page/202610/outputs/20261102-netdisk-drive-priority/。SSH ControlPath 为 /tmp/codex-netdisk-fallback-20261102.sock，结束后关闭。

@@ -746,7 +746,7 @@
     const acceleratorBtn = document.getElementById('acceleratorBtn');
     let acceleratorReady = false;
     let acceleratorOptOut = false;
-    let driveThresholdBytes = 30000000;
+    let driveThresholdBytes = -1;
     let activeUploadBase = '';
     async function detectAccelerator() {
       if (acceleratorOptOut) return false;
@@ -1018,7 +1018,7 @@
               if (!acceleratorReady) return;
               event.preventDefault();
               try { await nativeDownload(path); }
-              catch (error) { setStatus(error.message + '；可断开加速组件后使用普通下载', 'err'); }
+              catch (error) { setStatus('直连下载不可用，正在切换服务器通道'); window.location.assign(download.href); }
             });
           }
           actions.appendChild(download);
@@ -1091,6 +1091,7 @@
           const error = new Error(res.status === 401 || res.status === 403 ? '密码不正确' :
             res.status === 507 ? '服务器磁盘空间不足，上传进度已保留' : data.message || '上传请求失败');
           error.status = res.status;
+          error.driveUnavailable = data.can_fallback === true;
           throw error;
         }
         return data;
@@ -1107,6 +1108,7 @@
           return await operation(attempt);
         } catch (error) {
           assertUploadActive();
+          if (error.driveUnavailable) throw error;
           if ((error.status && error.status < 500 && error.status !== 409 && error.status !== 408 && error.status !== 429)
               || error.status === 507 || attempt >= 5) throw error;
           setStatus('连接中断，正在自动续传（' + (attempt + 1) + '/5）');
@@ -1156,6 +1158,31 @@
     }
 
     async function uploadOneFile(file, pass, onProgress, checkpoint) {
+      try {
+        await uploadOneFileAttempt(file, pass, onProgress, checkpoint);
+      } catch (error) {
+        assertUploadActive();
+        if (checkpoint.transport !== 'native' || !error.driveUnavailable) throw error;
+        checkpoint.nativeFailedId = checkpoint.id;
+        checkpoint.transport = 'server';
+        checkpoint.fallbackToServer = true;
+        checkpoint.id = null;
+        checkpoint.confirmedBytes = 0;
+        onProgress(0);
+        setStatus('Drive 直传不可用，正在使用服务器兜底 · ' + file.name);
+        await uploadOneFileAttempt(file, pass, onProgress, checkpoint);
+      }
+      if (checkpoint.nativeFailedId) {
+        try {
+          const res = await fetch(NATIVE_BASE + '/api/uploads/' + checkpoint.nativeFailedId, {
+            method: 'DELETE', headers: { 'X-Upload-Password': pass }
+          });
+          if (res.ok) checkpoint.nativeFailedId = null;
+        } catch (error) {}
+      }
+    }
+
+    async function uploadOneFileAttempt(file, pass, onProgress, checkpoint) {
       if (!checkpoint.transport) {
         const eligible = file.size > driveThresholdBytes;
         checkpoint.transport = eligible && await detectAccelerator() ? 'native' : 'server';
@@ -1173,7 +1200,8 @@
           }
         }
         return uploadRequest('/api/uploads', pass, { method: 'POST', body: JSON.stringify({
-          name: cleanName(file.name), size: file.size, last_modified: file.lastModified, fingerprint: checkpoint.fingerprint
+          name: cleanName(file.name), size: file.size, last_modified: file.lastModified, fingerprint: checkpoint.fingerprint,
+          fallback_to_server: checkpoint.fallbackToServer === true
         }) });
       });
       function confirmProgress(snapshot) {
@@ -1182,6 +1210,7 @@
             || snapshot.offset < 0 || snapshot.offset > file.size) throw new Error('服务器上传进度异常');
         checkpoint.id = snapshot.id;
         checkpoint.confirmedBytes = snapshot.offset;
+        checkpoint.storage = snapshot.storage;
         onProgress(snapshot.offset);
       }
       confirmProgress(state);
@@ -1201,6 +1230,7 @@
             if (next.error && !next.processing && !next.completed) {
               const failure = new Error(next.error);
               failure.status = 422;
+              failure.driveUnavailable = next.can_fallback === true;
               throw failure;
             }
             return next;
@@ -1289,7 +1319,8 @@
         fileInput.value = '';
         activeUploadTask = null;
         uploadPauseBtn.hidden = true;
-        setStatus('上传完成', 'ok');
+        const fallbackCount = task.checkpoints.filter(function(item) { return item.storage === 'server'; }).length;
+        setStatus(fallbackCount ? '上传完成 · ' + fallbackCount + ' 个文件已由服务器兜底保存' : '上传完成 · Google Drive', 'ok');
         loadFiles().catch(function() { setStatus('上传完成，文件列表刷新失败', 'err'); });
         uploadHideTimer = setTimeout(function() { uploadProgress.classList.remove('active'); }, 2500);
       } catch (err) {

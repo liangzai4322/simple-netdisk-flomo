@@ -61,7 +61,7 @@ def gdirect(arguments, token):
 
 class NativeDrive(DriveStorage):
     def ready(self):
-        return bool(socket.if_nametoindex(CONFIG['interface']))
+        return Path(CONFIG['gdirect']).is_file() and (APP/'bind_physical.dylib').is_file()
 
     def upload(self, partial, name):
         upload_id = partial.stem
@@ -99,6 +99,7 @@ class NativeDrive(DriveStorage):
         pass
 
 core.DRIVE = NativeDrive(SPOOL)
+core.ALLOW_SERVER_FALLBACK = False
 # Uploads explicitly sent to this component always use Drive, including an
 # optional user choice for small files. Ordinary devices retain server policy.
 core.storage_for_size = lambda size: 'drive'
