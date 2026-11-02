@@ -3,6 +3,7 @@ import cgi
 import base64
 import binascii
 import hashlib
+import hmac
 import datetime as dt
 import json
 import mimetypes
@@ -464,6 +465,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlsplit(self.path)
+        if parsed.path.startswith("/api/accelerator/"):
+            self.handle_accelerator(parsed.path.rsplit("/", 1)[-1])
+            return
         if parsed.path in ("/api/uploads", "/api/uploads/"):
             self.handle_resumable_upload("init", parsed)
             return
@@ -481,6 +485,61 @@ class Handler(BaseHTTPRequestHandler):
         if not self.require_password():
             return
         self.upload(parsed.path[len("/api/resources/"):], parse_qs(parsed.query))
+
+    def handle_accelerator(self, action):
+        # Only the paired native component receives short-lived Google tokens.
+        # No browser Origin or CORS access to this broker is accepted.
+        key_file = ROOT.parent / "gdirect" / "helper-key"
+        key = key_file.read_text().strip() if key_file.is_file() else ""
+        if (self.headers.get("Origin") or not key or
+                not hmac.compare_digest(self.headers.get("X-Netdisk-Helper-Key", ""), key)):
+            self.send_json(403, {"message": "native accelerator pairing required"})
+            return
+        try:
+            data = self.read_json_body()
+            if action == "status":
+                entry = DRIVE.get(relative_key(safe_path(data.get("path", ""))))
+                self.send_json(200, {"entry": entry})
+                return
+            if action == "session":
+                if data.get("mode") == "download":
+                    entry = DRIVE.get(relative_key(safe_path(data.get("path", ""))))
+                    if not entry:
+                        self.send_json(404, {"message": "Drive file not found"})
+                        return
+                    self.send_json(200, {"access_token": DRIVE.token(), "file_id": entry["id"], "size": entry["size"]})
+                else:
+                    if not self.require_password():
+                        return
+                    self.send_json(200, {"access_token": DRIVE.token(), "folder": DRIVE.folder_file.read_text().strip()})
+                return
+            if action != "commit":
+                self.send_json(404, {"message": "not found"})
+                return
+            if not self.require_password():
+                return
+            name, size, file_id, upload_id = (data.get(k) for k in ("name", "size", "file_id", "upload_id"))
+            target = upload_target({"name": name})
+            upload_paths(upload_id)
+            if type(size) is not int or size < 0:
+                raise ValueError("invalid file size")
+            with DRIVE.request(file_id, query={"fields": "id,name,size,parents,trashed"}) as response:
+                meta = json.load(response)
+            folder = DRIVE.folder_file.read_text().strip()
+            if (meta.get("name") != name or int(meta.get("size", -1)) != size or
+                    folder not in meta.get("parents", []) or meta.get("trashed")):
+                raise ValueError("uploaded file ownership or metadata mismatch")
+            previous = DRIVE.put(relative_key(target), file_id, size, upload_id)
+            target.unlink(missing_ok=True)
+            if previous and previous["id"] != file_id:
+                cleanup_drive_file(previous["id"])
+            self.send_json(200, {"completed": True, "storage": "drive", "size": size})
+        except DriveError as exc:
+            self.send_json(503, {"message": str(exc)})
+        except (ValueError, TypeError, KeyError):
+            self.send_json(400, {"message": "invalid accelerator request"})
+        except OSError:
+            self.send_json(503, {"message": "accelerator storage unavailable"})
 
     def do_PUT(self):
         parsed = urlsplit(self.path)

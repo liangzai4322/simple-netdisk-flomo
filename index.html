@@ -600,6 +600,7 @@
       <input id="passwordInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="首次输入密码，之后自动记住" title="密码仅保存在当前浏览器本地">
       <button id="uploadBtn" class="primary">上传</button>
       <button id="refreshBtn">刷新</button>
+      <button id="acceleratorBtn" type="button">连接加速</button>
         </section>
         <section id="uploadProgress" class="upload-progress" aria-live="polite">
           <div class="upload-progress-meta">
@@ -739,6 +740,55 @@
       }
       return API_BASE + path;
     }
+    const NATIVE_BASE = 'http://127.0.0.1:18743';
+    const acceleratorBtn = document.getElementById('acceleratorBtn');
+    let acceleratorReady = false;
+    let acceleratorOptOut = false;
+    let driveThresholdBytes = 30000000;
+    let activeUploadBase = '';
+    async function detectAccelerator() {
+      if (acceleratorOptOut) return false;
+      const controller = new AbortController();
+      const timer = setTimeout(function() { controller.abort(); }, 4000);
+      try {
+        const res = await fetch(NATIVE_BASE + '/health', { signal: controller.signal });
+        const data = await res.json();
+        acceleratorReady = res.ok && data.accelerator === 1;
+      } catch (error) { acceleratorReady = false; }
+      finally { clearTimeout(timer); }
+      acceleratorBtn.textContent = acceleratorReady ? '直连加速已连接' : '连接加速';
+      document.querySelectorAll('[data-native-eligible]').forEach(function(link) {
+        link.textContent = acceleratorReady ? '加速下载' : '下载';
+      });
+      return acceleratorReady;
+    }
+    acceleratorBtn.addEventListener('click', async function() {
+      if (acceleratorReady) {
+        acceleratorOptOut = true; acceleratorReady = false;
+        acceleratorBtn.textContent = '连接加速';
+        document.querySelectorAll('[data-native-eligible]').forEach(function(link) { link.textContent = '下载'; });
+        setStatus('已关闭直连加速'); return;
+      }
+      acceleratorOptOut = false;
+      const ready = await detectAccelerator();
+      setStatus(ready ? '直连加速已连接' : '未连接本机加速组件，继续使用普通通道', ready ? '' : 'err');
+    });
+    async function nativeDownload(path) {
+      const res = await fetch(NATIVE_BASE + '/downloads', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path })
+      });
+      const job = await res.json();
+      if (!res.ok) throw new Error(job.message || '无法开始直连下载');
+      setStatus('正在直连下载 · ' + path.split('/').pop());
+      for (;;) {
+        await new Promise(function(resolve) { setTimeout(resolve, 1200); });
+        const stateRes = await fetch(NATIVE_BASE + '/downloads/' + job.id);
+        const state = await stateRes.json();
+        if (!stateRes.ok || state.error) throw new Error(state.error || '下载状态读取失败');
+        if (state.completed) { setStatus('下载完成 · ' + state.local_path); return; }
+      }
+    }
+    function uploadUrl(path) { return activeUploadBase ? activeUploadBase + path : apiUrl(path); }
     function absoluteApiUrl(path) { return new URL(apiUrl(path), location.href).href; }
     const memoInput = document.getElementById('memoInput');
     const pasteZone = document.getElementById('pasteZone');
@@ -890,6 +940,7 @@
     async function loadFiles() {
       const res = await request('/api/resources/');
       const data = await res.json();
+      if (Number.isSafeInteger(data.drive_threshold_bytes)) driveThresholdBytes = data.drive_threshold_bytes;
       const items = Array.isArray(data.items) ? data.items : [];
       items.sort(function(a, b) {
         return new Date(b.modified || 0).getTime() - new Date(a.modified || 0).getTime();
@@ -957,7 +1008,16 @@
           download.className = 'button-link';
           download.href = apiUrl('/api/raw' + encoded);
           download.download = item.name || '';
-          download.textContent = '下载';
+          download.textContent = item.storage === 'drive' && acceleratorReady ? '加速下载' : '下载';
+          if (item.storage === 'drive') {
+            download.dataset.nativeEligible = '1';
+            download.addEventListener('click', async function(event) {
+              if (!acceleratorReady) return;
+              event.preventDefault();
+              try { await nativeDownload(path); }
+              catch (error) { setStatus(error.message + '；可断开加速组件后使用普通下载', 'err'); }
+            });
+          }
           actions.appendChild(download);
         }
 
@@ -1019,7 +1079,7 @@
       activeUploadRequest = controller;
       const timer = setTimeout(function() { controller.abort(); }, 30000);
       try {
-        const res = await fetch(apiUrl(path), Object.assign({}, options || {}, {
+        const res = await fetch(uploadUrl(path), Object.assign({}, options || {}, {
           signal: controller.signal,
           headers: { 'Content-Type': 'application/json', 'X-Upload-Password': pass }
         }));
@@ -1060,7 +1120,7 @@
       return new Promise(function(resolve, reject) {
         const xhr = new XMLHttpRequest();
         activeUploadXHR = xhr;
-        xhr.open('PUT', apiUrl(target), true);
+        xhr.open('PUT', uploadUrl(target), true);
         xhr.timeout = 10 * 60 * 1000;
         let lastActivity = Date.now();
         const watchdog = setInterval(function() {
@@ -1093,6 +1153,11 @@
     }
 
     async function uploadOneFile(file, pass, onProgress, checkpoint) {
+      if (!checkpoint.transport) {
+        const eligible = file.size > driveThresholdBytes;
+        checkpoint.transport = eligible && await detectAccelerator() ? 'native' : 'server';
+      }
+      activeUploadBase = checkpoint.transport === 'native' ? NATIVE_BASE : '';
       if (!checkpoint.fingerprint) checkpoint.fingerprint = await uploadFingerprint(file);
       assertUploadActive();
       let state = await retryUpload(async function() {
@@ -1126,7 +1191,7 @@
           }
           if (state.completed) return state;
           if (state.processing) {
-            setStatus('正在转存到 Google Drive · ' + file.name);
+            setStatus((activeUploadBase ? '正在直传到 Google Drive · ' : '正在转存到 Google Drive · ') + file.name);
             await new Promise(function(resolve) { setTimeout(resolve, 1500); });
             assertUploadActive();
             const next = await uploadRequest('/api/uploads/' + state.id, pass);
@@ -2009,6 +2074,7 @@
       return localDateKey(now);
     }
 
+    detectAccelerator();
     uploadBtn.addEventListener('click', uploadFiles);
     refreshBtn.addEventListener('click', async function() {
       setStatus('正在刷新');
